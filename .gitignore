@@ -1,0 +1,5 @@
+node_modules
+build
+package-lock.json
+Database_API/.env
+src/dist/

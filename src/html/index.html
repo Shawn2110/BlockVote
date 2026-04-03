@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BlockVote — Cast Your Vote</title>
+  <link rel="stylesheet" href="../css/index.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="header-brand">
+        <svg width="28" height="28" viewBox="0 0 48 48" fill="none">
+          <polygon points="24,2 44,13 44,35 24,46 4,35 4,13" fill="none" stroke="#58a6ff" stroke-width="2.5"/>
+          <circle cx="24" cy="24" r="5" fill="#58a6ff"/>
+        </svg>
+        <span class="brand-name">BlockVote</span>
+      </div>
+      <div class="header-right">
+        <div class="wallet-info">
+          <span class="wallet-dot"></span>
+          <span id="accountAddress" class="wallet-address">Connecting...</span>
+        </div>
+        <a href="/" class="logout-btn">Logout</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-content">
+    <div class="page-hero">
+      <h1>Cast Your Vote</h1>
+      <p>Your vote is securely recorded on the Ethereum blockchain</p>
+      <div class="voting-period-badge">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+          <line x1="16" y1="2" x2="16" y2="6"/>
+          <line x1="8" y1="2" x2="8" y2="6"/>
+          <line x1="3" y1="10" x2="21" y2="10"/>
+        </svg>
+        <span id="dates">Loading voting period...</span>
+      </div>
+    </div>
+
+    <div class="section-label">Select a Candidate</div>
+    <div id="boxCandidate" class="candidates-grid">
+      <div class="loading-state">
+        <div class="loading-spinner"></div>
+        <p>Loading candidates from blockchain...</p>
+      </div>
+    </div>
+
+    <div class="vote-action-bar">
+      <div id="msg" class="vote-msg"></div>
+      <button id="voteButton" class="vote-btn" onclick="App.vote()" disabled>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        Cast Vote on Blockchain
+      </button>
+      <div id="vote-box"></div>
+    </div>
+  </main>
+
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+  <script src="../dist/app.bundle.js" type="module"></script>
+</body>
+</html>
