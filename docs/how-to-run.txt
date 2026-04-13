@@ -1,0 +1,20 @@
+HOW TO RUN BLOCKVOTE
+====================
+
+Terminal 1 — start Ganache
+---------------------------
+ganache --port 8545 --networkId 1337
+
+
+Terminal 2 — deploy, bundle, start
+------------------------------------
+cd /workspaces/BlockVote/blockchain && npx truffle migrate --reset && cd ..
+npm run bundle
+npm run seed
+npm start
+
+
+Open: http://localhost:8080
+
+NOTE: npm run seed only needed the first time.
+      Skip it on subsequent runs if backend/voters.db already exists.
