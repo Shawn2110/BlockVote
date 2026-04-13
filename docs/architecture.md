@@ -24,7 +24,7 @@
 │  GET /               │                          ▼
 │  GET /login ─────────┤─────►  ┌────────────────────────────────────┐
 │  GET /index.html     │        │        GANACHE (Local Chain)        │
-│  GET /admin.html     │        │        http://127.0.0.1:7545        │
+│  GET /admin.html     │        │        http://127.0.0.1:8545        │
 │  GET /css/*          │        │        Network ID: 1337             │
 │  GET /js/*           │        │                                     │
 │  GET /dist/*         │        │   ┌─────────────────────────────┐  │

@@ -4,92 +4,108 @@ const votingArtifacts = require('../../blockchain/build/contracts/Voting.json');
 var VotingContract = contract(votingArtifacts);
 
 window.App = {
-  eventStart: function () {
-    window.ethereum.request({ method: 'eth_requestAccounts' });
+  eventStart: async function () {
+    if (typeof window.ethereum === 'undefined') {
+      alert('MetaMask not detected. Please install MetaMask and refresh.');
+      return;
+    }
+
+    try {
+      await window.ethereum.request({ method: 'eth_requestAccounts' });
+    } catch (err) {
+      alert('MetaMask connection rejected. Please approve the connection and refresh.');
+      return;
+    }
+
     VotingContract.setProvider(window.ethereum);
     VotingContract.defaults({ from: window.ethereum.selectedAddress, gas: 6654755 });
 
     App.account = window.ethereum.selectedAddress;
 
-    // Show truncated wallet address
     var addr = window.ethereum.selectedAddress;
     var short = addr ? addr.slice(0, 6) + '...' + addr.slice(-4) : '';
     $("#accountAddress").text(short);
 
-    VotingContract.deployed().then(function (instance) {
+    var instance;
+    try {
+      instance = await VotingContract.deployed();
+    } catch (err) {
+      var msg = 'Contract not found on this network. Switch MetaMask to Ganache (RPC: http://127.0.0.1:7545, Chain ID: 1337) and refresh.';
+      $('#boxCandidate').html('<div class="empty-state" style="color:#f85149">' + msg + '</div>');
+      $("#dates").text("Network error — check MetaMask");
+      return;
+    }
 
-      // --- Voting dates ---
-      instance.getDates().then(function (result) {
-        var start = new Date(result[0] * 1000);
-        var end   = new Date(result[1] * 1000);
-        if (result[0] * 1 === 0) {
-          $("#dates").text("Voting period not set yet");
-        } else {
-          $("#dates").text(start.toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' }) +
-            " — " + end.toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' }));
+    // --- Voting dates ---
+    instance.getDates().then(function (result) {
+      var start = new Date(result[0] * 1000);
+      var end   = new Date(result[1] * 1000);
+      if (result[0] * 1 === 0) {
+        $("#dates").text("Voting period not set yet");
+      } else {
+        $("#dates").text(
+          start.toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' }) +
+          " — " +
+          end.toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' })
+        );
+      }
+    }).catch(function (err) { console.error("getDates error:", err.message); });
+
+    // --- Admin controls ---
+    $(document).ready(function () {
+      $('#addCandidate').click(function () {
+        var nameCandidate  = $('#name').val().trim();
+        var partyCandidate = $('#party').val().trim();
+        if (!nameCandidate || !partyCandidate) {
+          $('#candidateMsg').text('Please fill in both fields.').addClass('error');
+          return;
         }
-      }).catch(function (err) { console.error("getDates error:", err.message); });
-
-      // --- Admin controls ---
-      $(document).ready(function () {
-        $('#addCandidate').click(function () {
-          var nameCandidate  = $('#name').val().trim();
-          var partyCandidate = $('#party').val().trim();
-          if (!nameCandidate || !partyCandidate) {
-            $('#candidateMsg').text('Please fill in both fields.').addClass('error');
-            return;
-          }
-          $(this).prop('disabled', true).text('Adding...');
-          instance.addCandidate(nameCandidate, partyCandidate).then(function () {
-            $('#candidateMsg').text('Candidate added successfully!').removeClass('error');
-            $('#name').val('');
-            $('#party').val('');
-            $('#addCandidate').prop('disabled', false).html(
-              '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add Candidate'
-            );
-            // Refresh candidate list
-            App.loadCandidates(instance);
-          }).catch(function (err) {
-            $('#candidateMsg').text('Error: ' + err.message).addClass('error');
-            $('#addCandidate').prop('disabled', false);
-          });
-        });
-
-        $('#addDate').click(function () {
-          var startDate = Date.parse(document.getElementById("startDate").value) / 1000;
-          var endDate   = Date.parse(document.getElementById("endDate").value) / 1000;
-          if (!startDate || !endDate) {
-            $('#dateMsg').text('Please select both dates.').addClass('error');
-            return;
-          }
-          $(this).prop('disabled', true).text('Setting...');
-          instance.setDates(startDate, endDate).then(function () {
-            $('#dateMsg').text('Voting dates set successfully!').removeClass('error');
-            $('#addDate').prop('disabled', false).html(
-              '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Set Voting Dates'
-            );
-          }).catch(function (err) {
-            $('#dateMsg').text('Error: ' + err.message).addClass('error');
-            $('#addDate').prop('disabled', false);
-          });
+        $(this).prop('disabled', true).text('Adding...');
+        instance.addCandidate(nameCandidate, partyCandidate).then(function () {
+          $('#candidateMsg').text('Candidate added successfully!').removeClass('error');
+          $('#name').val('');
+          $('#party').val('');
+          $('#addCandidate').prop('disabled', false).html(
+            '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add Candidate'
+          );
+          App.loadCandidates(instance);
+        }).catch(function (err) {
+          $('#candidateMsg').text('Error: ' + err.message).addClass('error');
+          $('#addCandidate').prop('disabled', false);
         });
       });
 
-      // --- Load candidates ---
-      App.loadCandidates(instance);
-
-      // --- Check if already voted (voter page only) ---
-      instance.checkVote().then(function (voted) {
-        if (!voted) {
-          $("#voteButton").attr("disabled", false);
-        } else {
-          $("#voteButton").attr("disabled", true);
-          $("#msg").text("You have already cast your vote. Thank you!").css('color', '#3fb950');
+      $('#addDate').click(function () {
+        var startDate = Date.parse(document.getElementById("startDate").value) / 1000;
+        var endDate   = Date.parse(document.getElementById("endDate").value) / 1000;
+        if (!startDate || !endDate) {
+          $('#dateMsg').text('Please select both dates.').addClass('error');
+          return;
         }
+        $(this).prop('disabled', true).text('Setting...');
+        instance.setDates(startDate, endDate).then(function () {
+          $('#dateMsg').text('Voting dates set successfully!').removeClass('error');
+          $('#addDate').prop('disabled', false).html(
+            '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Set Voting Dates'
+          );
+        }).catch(function (err) {
+          $('#dateMsg').text('Error: ' + err.message).addClass('error');
+          $('#addDate').prop('disabled', false);
+        });
       });
+    });
 
-    }).catch(function (err) {
-      console.error("Contract error:", err.message);
+    // --- Load candidates ---
+    App.loadCandidates(instance);
+
+    // --- Check if already voted (voter page only) ---
+    instance.checkVote().then(function (voted) {
+      if (!voted) {
+        $("#voteButton").attr("disabled", false);
+      } else {
+        $("#voteButton").attr("disabled", true);
+        $("#msg").text("You have already cast your vote. Thank you!").css('color', '#3fb950');
+      }
     });
   },
 
@@ -97,7 +113,6 @@ window.App = {
     instance.getCountCandidates().then(function (countCandidates) {
       var count = parseInt(countCandidates);
 
-      // Update count badge on admin page
       $('#candidateCount').text(count + ' candidate' + (count !== 1 ? 's' : ''));
 
       if (count === 0) {
@@ -105,7 +120,6 @@ window.App = {
         return;
       }
 
-      // Load all candidates in parallel then render with progress bars
       var promises = [];
       for (var i = 1; i <= count; i++) {
         promises.push(instance.getCandidate(i));
@@ -129,7 +143,6 @@ window.App = {
           var initial   = name.charAt(0).toUpperCase();
 
           if (isAdminPage) {
-            // Admin: horizontal rows
             var row = `
               <div class="admin-candidate-row">
                 <div class="row-avatar">${initial}</div>
@@ -144,7 +157,6 @@ window.App = {
               </div>`;
             $('#boxCandidate').append(row);
           } else {
-            // Voter: interactive cards
             var card = `
               <div class="candidate-card" data-id="${id}" onclick="App.selectCandidate(this, ${id})">
                 <input type="radio" name="candidate" value="${id}" id="c${id}">
@@ -172,7 +184,6 @@ window.App = {
           }
         });
 
-        // Animate progress bars after render
         setTimeout(function () {
           $('.vote-bar-fill').each(function () {
             $(this).css('width', $(this).data('width'));
@@ -186,10 +197,8 @@ window.App = {
   },
 
   selectCandidate: function (el, id) {
-    // Deselect all
     $('.candidate-card').removeClass('selected');
     $('input[name="candidate"]').prop('checked', false);
-    // Select clicked
     $(el).addClass('selected');
     $('#c' + id).prop('checked', true);
   },
@@ -221,7 +230,7 @@ window.addEventListener("load", function () {
     window.eth = new Web3(window.ethereum);
   } else {
     console.warn("No MetaMask detected. Falling back to http://127.0.0.1:7545");
-    window.eth = new Web3(new Web3.providers.HttpProvider("http://127.0.0.1:7545"));
+    window.eth = new Web3(new Web3.providers.HttpProvider("http://127.0.0.1:8545"));
   }
   window.App.eventStart();
 });

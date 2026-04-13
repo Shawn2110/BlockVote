@@ -84,7 +84,7 @@ Install the [MetaMask](https://metamask.io/download/) browser extension, then ad
 | Field | Value |
 |-------|-------|
 | Network Name | Ganache |
-| RPC URL | `http://127.0.0.1:7545` |
+| RPC URL | `http://127.0.0.1:8545` |
 | Chain ID | `1337` |
 | Currency | ETH |
 
@@ -95,7 +95,7 @@ Install the [MetaMask](https://metamask.io/download/) browser extension, then ad
 ### Terminal 1 — Start the blockchain
 
 ```bash
-ganache --port 7545 --networkId 1337
+ganache --port 8545 --networkId 1337
 ```
 
 Keep this running. It prints 10 funded test accounts with private keys.
