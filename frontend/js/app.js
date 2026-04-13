@@ -50,6 +50,17 @@ window.App = {
       }
     }
 
+    // --- Election name ---
+    instance.getElectionName().then(function (name) {
+      if (name && name.length > 0) {
+        $('#electionTitle').text(name);
+        $('#electionNameInput').val(name).prop('disabled', true);
+        $('#setElection').prop('disabled', true).text('Election name already set');
+      } else {
+        $('#electionTitle').text('Election');
+      }
+    }).catch(function (err) { console.error("getElectionName error:", err.message); });
+
     // --- Voting dates ---
     instance.getDates().then(function (result) {
       var start = new Date(result[0] * 1000);
@@ -67,6 +78,26 @@ window.App = {
 
     // --- Admin controls ---
     $(document).ready(function () {
+      $('#setElection').click(function () {
+        var name = $('#electionNameInput').val().trim();
+        if (!name) {
+          $('#electionMsg').text('Please enter an election name.').css('color', '#f85149');
+          return;
+        }
+        $(this).prop('disabled', true).text('Setting...');
+        instance.setElectionName(name).then(function () {
+          $('#electionMsg').text('Election name set successfully!').css('color', '#3fb950');
+          $('#electionTitle').text(name);
+          $('#electionNameInput').prop('disabled', true);
+          $('#setElection').text('Election name already set');
+        }).catch(function (err) {
+          $('#electionMsg').text('Error: ' + err.message).css('color', '#f85149');
+          $('#setElection').prop('disabled', false).html(
+            '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Set Election Name'
+          );
+        });
+      });
+
       $('#addCandidate').click(function () {
         var nameCandidate  = $('#name').val().trim();
         var partyCandidate = $('#party').val().trim();
