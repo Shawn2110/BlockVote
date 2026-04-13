@@ -265,10 +265,6 @@ window.App = {
       }
 
       Promise.all(promises).then(function (candidates) {
-        var totalVotes = candidates.reduce(function (sum, c) {
-          return sum + parseInt(c[3]);
-        }, 0);
-
         $('#boxCandidate').empty();
 
         var isAdminPage = document.title.includes('Admin');
@@ -278,7 +274,6 @@ window.App = {
           var name      = data[1];
           var party     = data[2];
           var voteCount = parseInt(data[3]);
-          var percent   = totalVotes > 0 ? Math.round((voteCount / totalVotes) * 100) : 0;
           var initial   = name.charAt(0).toUpperCase();
 
           if (isAdminPage) {
@@ -311,23 +306,10 @@ window.App = {
                     </svg>
                   </div>
                 </div>
-                <div class="vote-bar-label">
-                  <span class="vote-count-text">${voteCount} vote${voteCount !== 1 ? 's' : ''}</span>
-                  <span class="vote-percent-text">${percent}%</span>
-                </div>
-                <div class="vote-bar-track">
-                  <div class="vote-bar-fill" style="width: 0%;" data-width="${percent}%"></div>
-                </div>
               </div>`;
             $('#boxCandidate').append(card);
           }
         });
-
-        setTimeout(function () {
-          $('.vote-bar-fill').each(function () {
-            $(this).css('width', $(this).data('width'));
-          });
-        }, 100);
 
       }).catch(function (err) {
         console.error('loadCandidates error:', err.message);
