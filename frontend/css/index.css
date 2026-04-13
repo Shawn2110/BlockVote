@@ -110,22 +110,22 @@ body::after {
 }
 
 /* Hero */
-.page-hero { text-align: center; margin-bottom: 52px; }
+.page-hero { text-align: center; margin-bottom: 36px; }
 .page-hero h1 {
-  font-size: 42px;
+  font-size: 36px;
   font-weight: 800;
   background: linear-gradient(135deg, #e6edf3 30%, #58a6ff 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   margin-bottom: 10px;
-  letter-spacing: -1px;
-  line-height: 1.15;
-  filter: drop-shadow(0 0 30px rgba(88,166,255,0.2));
+  letter-spacing: -0.8px;
+  line-height: 1.2;
+  filter: drop-shadow(0 0 24px rgba(88,166,255,0.18));
 }
 .page-hero p {
-  font-size: 15px;
+  font-size: 14px;
   color: #6e7681;
-  margin-bottom: 20px;
+  margin-bottom: 0;
   font-weight: 400;
 }
 .voting-period-badge {
@@ -274,6 +274,56 @@ body::after {
   box-shadow: 0 0 10px rgba(56,139,253,0.2);
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Election tabs (voter page) */
+.election-tabs-wrapper {
+  margin-bottom: 36px;
+}
+.election-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.election-tab {
+  padding: 10px 22px;
+  background: rgba(22,27,34,0.7);
+  border: 1px solid rgba(48,54,61,0.7);
+  border-radius: 10px;
+  color: #8b949e;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16,1,0.3,1);
+  white-space: nowrap;
+}
+.election-tab:hover {
+  color: #e6edf3;
+  border-color: rgba(88,166,255,0.3);
+  background: rgba(31,111,235,0.06);
+}
+.election-tab.active {
+  background: linear-gradient(135deg, rgba(31,111,235,0.18), rgba(124,58,237,0.12));
+  border-color: rgba(56,139,253,0.5);
+  color: #58a6ff;
+  box-shadow: 0 0 0 1px rgba(56,139,253,0.15), 0 4px 16px rgba(56,139,253,0.12);
+}
+
+/* Per-election detail header */
+.election-detail-header {
+  margin-bottom: 36px;
+}
+.election-detail-title {
+  font-size: 32px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #e6edf3 30%, #58a6ff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: -0.8px;
+  line-height: 1.2;
+  margin-bottom: 14px;
+  filter: drop-shadow(0 0 20px rgba(88,166,255,0.15));
+}
 
 /* Vote action bar */
 .vote-action-bar {
