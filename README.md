@@ -25,11 +25,9 @@ A secure and transparent voting system built on the Ethereum blockchain. Votes a
 BlockVote/
 ├── blockchain/
 │   ├── contracts/
-│   │   ├── Voting.sol              # Main voting smart contract
+│   │   ├── Voting.sol              # Multi-election smart contract
 │   │   └── Migrations.sol
 │   ├── migrations/
-│   │   ├── 1_initial_migration.js
-│   │   └── 2_deploy_contracts.js
 │   └── truffle-config.js
 │
 ├── backend/
@@ -41,13 +39,16 @@ BlockVote/
 │   └── middleware/auth.js          # JWT check
 │
 ├── frontend/
-│   ├── html/                       # login, voter, admin pages
+│   ├── html/                       # login.html, index.html, admin.html
 │   ├── css/
 │   ├── js/
 │   │   ├── login.js
 │   │   └── app.js                  # Web3 + contract interaction
-│   ├── assets/
-│   └── dist/                       # Bundled JS (generated)
+│   └── dist/                       # Bundled JS (generated, gitignored)
+│
+├── docs/
+│   ├── architecture.md
+│   └── code-explained.md
 │
 ├── .env                            # SECRET_KEY
 └── package.json
@@ -55,65 +56,113 @@ BlockVote/
 
 ---
 
-## Local Setup
+## Running the App
 
-### 1. Install global tools
+### Prerequisites (one-time)
 
 ```bash
 npm install -g truffle ganache
-```
-
-### 2. Install dependencies
-
-```bash
 npm install
 ```
 
-### 3. Configure the JWT secret
-
-Edit `.env` in the project root:
-
-```
-SECRET_KEY=any_string_you_want
-```
-
-### 4. Set up MetaMask
-
-Install the [MetaMask](https://metamask.io/download/) browser extension, then add a custom network:
-
-| Field | Value |
-|-------|-------|
-| Network Name | Ganache |
-| RPC URL | `http://127.0.0.1:8545` |
-| Chain ID | `1337` |
-| Currency | ETH |
-
 ---
 
-## Running the App
-
-### Terminal 1 — Start the blockchain
+### Step 1 — Start Ganache (Terminal 1)
 
 ```bash
 ganache --port 8545 --networkId 1337
 ```
 
-Keep this running. It prints 10 funded test accounts with private keys.
+Keep this running. Copy the **10 test account private keys** printed on startup — you'll import one into MetaMask.
 
-### Terminal 2 — Deploy contracts, bundle, and start
+---
+
+### Step 2 — Deploy the contract (Terminal 2)
 
 ```bash
 cd blockchain
-truffle compile
-truffle migrate --network development
+truffle migrate --reset
 cd ..
+```
 
+---
+
+### Step 3 — Bundle the frontend JS
+
+```bash
 npm run bundle
-npm run seed       # first time only — creates voters.db
+```
+
+---
+
+### Step 4 — Seed the voter database (first time only)
+
+```bash
+npm run seed
+```
+
+---
+
+### Step 5 — Start the server
+
+```bash
 npm start
 ```
 
-Open **http://localhost:8080**.
+Open **http://localhost:8080**
+
+---
+
+## MetaMask Setup
+
+> **Running in GitHub Codespaces?** Ganache is inside a container. MetaMask on your local browser can't reach `127.0.0.1:8545`. You must expose port 8545 publicly:
+> ```bash
+> gh codespace ports visibility 8545:public
+> ```
+> Then use the **HTTPS forwarding URL** (e.g. `https://xxx-8545.app.github.dev`) as the RPC URL below.
+
+1. Install the [MetaMask](https://metamask.io/download/) browser extension
+2. Add a custom network:
+
+| Field | Value |
+|-------|-------|
+| Network Name | Ganache |
+| RPC URL | `http://127.0.0.1:8545` *(or the Codespace HTTPS URL)* |
+| Chain ID | `1337` |
+| Currency Symbol | ETH |
+
+3. Import an account using a private key from the Ganache terminal output
+
+---
+
+## Demo Login Accounts
+
+| Voter ID | Password | Role |
+|----------|----------|------|
+| `admin` | `admin123` | Admin |
+| `voter1` | `pass1` | Voter |
+| `voter2` – `voter10` | `pass2` – `pass10` | Voter |
+
+---
+
+## Workflow
+
+### Admin
+1. Log in as `admin` / `admin123`
+2. **Create Elections** — type a name and click "Create Election" (stored on-chain)
+3. **Select an election** from the tab row
+4. Add candidates (name + party) to the selected election
+5. Set voting start/end dates for the selected election
+
+### Voter
+1. Log in as `voter1` / `pass1` (or any voter account)
+2. MetaMask will prompt to connect — approve it
+3. **Select an election** from the tab row
+4. Click a candidate card to select it
+5. Click **Cast Vote on Blockchain** — confirm the MetaMask transaction
+6. Vote counts update after the transaction confirms
+
+> Each Ethereum address gets one vote **per election**. Voters can participate in multiple elections.
 
 ---
 
@@ -127,53 +176,36 @@ Open **http://localhost:8080**.
 
 ---
 
-## Demo Accounts
-
-| Voter ID | Password | Role |
-|----------|----------|------|
-| `admin` | `admin123` | Admin |
-| `voter1` | `pass1` | Voter |
-| `voter2` – `voter10` | `pass2` – `pass10` | Voter |
-
----
-
-## Workflow
-
-1. **Admin** — Log in as `admin`, add candidates, set the voting start and end dates
-2. **Voters** — Log in as `voter1`–`voter10`, select a candidate, click **Cast Vote**
-3. MetaMask will prompt you to confirm the blockchain transaction
-4. Vote counts update live on the voter and admin pages
-
----
-
-## How the Auth Flow Works
-
-```
-Login form → POST /login (Express + SQLite)
-           → JWT returned → stored in localStorage
-           → redirected to /index.html?Authorization=Bearer <token>
-           → Express middleware verifies JWT before serving the page
-```
-
-Voting and results are read/written directly to the smart contract via MetaMask — the backend is only involved in authentication.
-
----
-
 ## Smart Contract (`Voting.sol`)
 
 | Function | Description |
 |----------|-------------|
-| `addCandidate(name, party)` | Register a new candidate |
-| `setDates(start, end)` | Set the voting period (one-time) |
-| `vote(candidateID)` | Cast a vote |
-| `checkVote()` | Returns true if the caller has already voted |
-| `getCandidate(id)` | Returns candidate details and vote count |
-| `getDates()` | Returns voting start/end timestamps |
+| `createElection(name)` | Create a new named election |
+| `addCandidate(electionId, name, party)` | Add a candidate to an election |
+| `setDates(electionId, start, end)` | Set voting period for an election |
+| `vote(electionId, candidateId)` | Cast a vote in a specific election |
+| `checkVote(electionId)` | Returns true if caller already voted in this election |
+| `getElection(id)` | Returns election details (name, dates, candidate count) |
+| `getCandidate(electionId, candidateId)` | Returns candidate details and vote count |
+| `getCountElections()` | Total number of elections |
 
 Enforced by the contract:
-- Votes only accepted within the voting window
-- One vote per Ethereum address
-- Candidate ID must exist
+- Votes only accepted within the configured voting window
+- One vote per Ethereum address **per election**
+- Candidate and election IDs must exist
+
+---
+
+## Auth Flow
+
+```
+Login form → GET /login?voter_id=&password= (Express + SQLite)
+           → JWT returned → stored in sessionStorage
+           → redirected to /index.html?Authorization=Bearer <token>
+           → Express middleware verifies JWT before serving the page
+```
+
+Voting is done entirely via MetaMask and the smart contract — the backend only handles login.
 
 ---
 
