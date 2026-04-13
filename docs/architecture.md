@@ -28,18 +28,18 @@
 │  GET /css/*          │        │        Network ID: 1337             │
 │  GET /js/*           │        │                                     │
 │  GET /dist/*         │        │   ┌─────────────────────────────┐  │
-│  GET /assets/*       │        │   │     Voting.sol Contract     │  │
+│                      │        │   │     Voting.sol Contract     │  │
 └──────────┬───────────┘        │   │                             │  │
-           │                    │   │  addCandidate()             │  │
-           │                    │   │  vote()                     │  │
-           ▼                    │   │  checkVote()                │  │
-┌──────────────────────┐        │   │  setDates()                 │  │
-│  SQLITE DATABASE     │        │   │  getCandidate()             │  │
-│  backend/voters.db   │        │   │  getCountCandidates()       │  │
-│                      │        │   │  getDates()                 │  │
-│  Table: voters       │        │   └─────────────────────────────┘  │
-│  ┌──────────────┐    │        └────────────────────────────────────┘
-│  │ voter_id     │    │
+           │                    │   │  createElection()           │  │
+           │                    │   │  addCandidate(electionId)   │  │
+           ▼                    │   │  setDates(electionId)       │  │
+┌──────────────────────┐        │   │  vote(electionId, candId)   │  │
+│  SQLITE DATABASE     │        │   │  checkVote(electionId)      │  │
+│  backend/voters.db   │        │   │  getElection(id)            │  │
+│                      │        │   │  getCandidate(eId, cId)     │  │
+│  Table: voters       │        │   │  getCountElections()        │  │
+│  ┌──────────────┐    │        │   └─────────────────────────────┘  │
+│  │ voter_id     │    │        └────────────────────────────────────┘
 │  │ password     │    │
 │  │ role         │    │
 │  └──────────────┘    │
@@ -81,7 +81,7 @@ User enters Voter ID + Password
      │
      ▼
   login.js stores token
-  in localStorage
+  in sessionStorage
      │
      ├── role=admin ──► /admin.html?Authorization=Bearer <token>
      │
@@ -115,44 +115,66 @@ Browser requests /index.html or /admin.html
 
 ---
 
-## Voting Flow (On-Chain)
+## Multi-Election Flow (On-Chain)
 
 ```
-Voter selects a candidate card
+Admin creates elections
+  createElection("Council Vote") ──► elections[1] = {id:1, name, 0, 0, 0}
+  createElection("Board Vote")   ──► elections[2] = {id:2, name, 0, 0, 0}
            │
            ▼
-    App.vote() called
+Admin selects election tab (e.g. Election 1)
+           │
+           ├── addCandidate(1, "Alice", "Green Party")
+           │       ──► candidates[1][1] = {id:1, "Alice", ...}
+           │
+           ├── addCandidate(1, "Bob", "Blue Party")
+           │       ──► candidates[1][2] = {id:2, "Bob", ...}
+           │
+           └── setDates(1, startTimestamp, endTimestamp)
+                   ──► elections[1].startDate = start
+                   ──► elections[1].endDate   = end
            │
            ▼
-  VotingContract.deployed()
-  .then instance.vote(candidateID)
+Voter logs in → sees election tab row
+           │
+           ├── Selects "Council Vote" tab
+           │       ──► getElection(1) → name, dates
+           │       ──► getCandidate(1, 1..N) → candidate cards rendered
+           │
+           ├── Clicks a candidate card
+           │       ──► App.selectCandidate() marks card as selected
+           │       ──► vote button enabled
+           │
+           └── Clicks "Cast Vote on Blockchain"
+                   ──► App.vote() → instance.vote(electionId=1, candidateId=2)
+                   ──► MetaMask popup: confirm transaction
+                   ──► Ganache executes vote() on Voting.sol
+```
+
+---
+
+## Voting (Contract) Flow
+
+```
+instance.vote(electionId, candidateId) called
            │
            ▼
-  MetaMask popup:
-  "Confirm Transaction?"
-           │
-     ┌─────┴──────┐
-     │            │
-  Confirmed    Rejected
-     │            │
-     ▼            ▼
-  Ganache       Error shown
-  executes      to user
-  Voting.sol
-  vote()
-     │
-     ▼
   Contract checks:
-  1. votingStart <= now < votingEnd  ──► fail: revert
-  2. candidateID valid               ──► fail: revert
-  3. !voters[msg.sender]             ──► fail: revert (double vote)
-     │
-     ▼
-  voters[msg.sender] = true
-  candidates[id].voteCount++
-  (stored permanently on-chain)
-     │
-     ▼
+  1. electionId valid                ──► fail: revert "Invalid election"
+  2. election.startDate > 0          ──► fail: revert "Voting period not set"
+  3. now >= startDate && now < end   ──► fail: revert "Not within voting period"
+  4. candidateId valid               ──► fail: revert "Invalid candidate"
+  5. !voters[electionId][msg.sender] ──► fail: revert "Already voted"
+           │
+     All checks pass
+           │
+           ▼
+  voters[electionId][msg.sender] = true
+  candidates[electionId][candidateId].voteCount++
+  (permanent, immutable on-chain)
+           │
+           ▼
   "Vote cast successfully!"
   Page reloads after 2s
 ```
@@ -164,18 +186,22 @@ Voter selects a candidate card
 ```
 Admin logs in → /admin.html
        │
-       ├── Add Candidate ──► addCandidate(name, party)
-       │                     ──► Ganache: countCandidates++
-       │                     ──► candidates[id] = {id, name, party, 0}
+       ├── Create Election ──► createElection(name)
+       │                       ──► Ganache: countElections++
+       │                       ──► elections[id] = {id, name, 0, 0, 0}
+       │                       ──► Tab strip reloads with new election
        │
-       ├── Set Voting Dates ──► setDates(startTimestamp, endTimestamp)
-       │                        ──► Ganache: validates one-time-only
-       │                        ──► votingStart = start, votingEnd = end
+       ├── Select Election Tab ──► App.selectElection(id, 'admin')
+       │                           ──► getElection(id) → show "Managing: X"
+       │                           ──► loadCandidates(id)
        │
-       └── Live Results ──► loadCandidates()
-                            ──► getCountCandidates() → N
-                            ──► getCandidate(1..N) in parallel
-                            ──► render vote count rows
+       ├── Add Candidate ──► addCandidate(electionId, name, party)
+       │                     ──► candidates[electionId][newId] = {...}
+       │                     ──► candidate list refreshes
+       │
+       └── Set Voting Dates ──► setDates(electionId, start, end)
+                               ──► elections[electionId].startDate = start
+                               ──► elections[electionId].endDate   = end
 ```
 
 ---
@@ -190,7 +216,11 @@ Admin logs in → /admin.html
 ├──────────────────────────────────────────────────────────┤
 │  CLIENT LOGIC LAYER (frontend/js/)                       │
 │  login.js  — form submit, fetch /login, redirect         │
-│  app.js    — Web3 init, contract calls, DOM updates      │
+│  app.js    — Web3 init, multi-election contract calls    │
+│              App.loadElectionTabs()                       │
+│              App.selectElection()                         │
+│              App.loadCandidates()                         │
+│              App.vote()                                   │
 ├──────────────────────────────────────────────────────────┤
 │  SERVER LAYER (backend/)                                 │
 │  server.js          — Express routes + static files      │
@@ -203,7 +233,7 @@ Admin logs in → /admin.html
 │  voters.db   — SQLite file (git-ignored)                 │
 ├──────────────────────────────────────────────────────────┤
 │  BLOCKCHAIN LAYER (blockchain/)                          │
-│  contracts/Voting.sol      — voting logic on-chain       │
+│  contracts/Voting.sol      — multi-election voting logic │
 │  migrations/               — Truffle deploy scripts      │
 │  truffle-config.js         — Ganache network config      │
 │  build/contracts/          — compiled ABI + address      │
