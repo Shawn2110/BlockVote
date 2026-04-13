@@ -4,6 +4,9 @@ const votingArtifacts = require('../../blockchain/build/contracts/Voting.json');
 var VotingContract = contract(votingArtifacts);
 
 window.App = {
+  instance: null,
+  selectedElectionId: null,
+
   eventStart: async function () {
     if (typeof window.ethereum === 'undefined') {
       alert('MetaMask not detected. Please install MetaMask and refresh.');
@@ -24,139 +27,230 @@ window.App = {
 
     var addr = window.ethereum.selectedAddress;
     var short = addr ? addr.slice(0, 6) + '...' + addr.slice(-4) : '';
-    $("#accountAddress").text(short);
+    $('#accountAddress').text(short);
 
-    var instance;
     try {
-      // Try deployed() first (uses network ID lookup)
-      instance = await VotingContract.deployed();
+      App.instance = await VotingContract.deployed();
     } catch (err) {
-      // Fallback: use the address directly from artifacts
       var networks = votingArtifacts.networks;
       var networkKeys = Object.keys(networks);
       if (networkKeys.length === 0) {
-        $('#boxCandidate').html('<div class="empty-state" style="color:#f85149">No deployed contract found. Run truffle migrate and rebuild the bundle.</div>');
-        $("#dates").text("Contract not deployed");
+        var errHtml = '<div class="empty-state" style="color:#f85149">No deployed contract found. Run truffle migrate and rebuild the bundle.</div>';
+        if ($('#electionTabsWrapper').length) $('#electionTabsWrapper').html(errHtml);
+        if ($('#electionTabs').length) $('#electionTabs').html(errHtml);
         return;
       }
-      // Use the most recently deployed address
       var latestAddress = networks[networkKeys[networkKeys.length - 1]].address;
       try {
-        instance = await VotingContract.at(latestAddress);
+        App.instance = await VotingContract.at(latestAddress);
       } catch (err2) {
-        $('#boxCandidate').html('<div class="empty-state" style="color:#f85149">Could not connect to contract at ' + latestAddress + '. Make sure MetaMask is on Localhost 8545 and refresh.</div>');
-        $("#dates").text("Network error — check MetaMask");
+        var netErrHtml = '<div class="empty-state" style="color:#f85149">Could not connect to contract at ' + latestAddress + '. Make sure MetaMask is on Localhost 8545 and refresh.</div>';
+        if ($('#electionTabsWrapper').length) $('#electionTabsWrapper').html(netErrHtml);
+        if ($('#electionTabs').length) $('#electionTabs').html(netErrHtml);
         return;
       }
     }
 
-    // --- Election name ---
-    instance.getElectionName().then(function (name) {
-      if (name && name.length > 0) {
-        $('#electionTitle').text(name);
-        $('#electionNameInput').val(name).prop('disabled', true);
-        $('#setElection').prop('disabled', true).text('Election name already set');
-      } else {
-        $('#electionTitle').text('Election');
-      }
-    }).catch(function (err) { console.error("getElectionName error:", err.message); });
+    var isAdminPage = document.title.includes('Admin');
 
-    // --- Voting dates ---
-    instance.getDates().then(function (result) {
-      var start = new Date(result[0] * 1000);
-      var end   = new Date(result[1] * 1000);
-      if (result[0] * 1 === 0) {
-        $("#dates").text("Voting period not set yet");
-      } else {
-        $("#dates").text(
-          start.toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' }) +
-          " — " +
-          end.toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' })
-        );
-      }
-    }).catch(function (err) { console.error("getDates error:", err.message); });
+    if (isAdminPage) {
+      App.initAdmin();
+    } else {
+      App.initVoter();
+    }
+  },
 
-    // --- Admin controls ---
+  // ── Admin ─────────────────────────────────────────────────────────────────
+
+  initAdmin: function () {
+    App.loadElectionTabs('admin');
+
     $(document).ready(function () {
-      $('#setElection').click(function () {
+
+      $('#createElectionBtn').click(function () {
         var name = $('#electionNameInput').val().trim();
         if (!name) {
           $('#electionMsg').text('Please enter an election name.').css('color', '#f85149');
           return;
         }
-        $(this).prop('disabled', true).text('Setting...');
-        instance.setElectionName(name).then(function () {
-          $('#electionMsg').text('Election name set successfully!').css('color', '#3fb950');
-          $('#electionTitle').text(name);
-          $('#electionNameInput').prop('disabled', true);
-          $('#setElection').text('Election name already set');
+        $(this).prop('disabled', true).text('Creating...');
+        App.instance.createElection(name).then(function () {
+          $('#electionMsg').text('Election created successfully!').css('color', '#3fb950');
+          $('#electionNameInput').val('');
+          $('#createElectionBtn').prop('disabled', false).html(
+            '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Create Election'
+          );
+          App.loadElectionTabs('admin');
         }).catch(function (err) {
           $('#electionMsg').text('Error: ' + err.message).css('color', '#f85149');
-          $('#setElection').prop('disabled', false).html(
-            '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Set Election Name'
-          );
+          $('#createElectionBtn').prop('disabled', false);
         });
       });
 
       $('#addCandidate').click(function () {
-        var nameCandidate  = $('#name').val().trim();
-        var partyCandidate = $('#party').val().trim();
-        if (!nameCandidate || !partyCandidate) {
-          $('#candidateMsg').text('Please fill in both fields.').addClass('error');
+        if (!App.selectedElectionId) {
+          $('#candidateMsg').text('Select an election first.').css('color', '#f85149');
+          return;
+        }
+        var nameVal  = $('#name').val().trim();
+        var partyVal = $('#party').val().trim();
+        if (!nameVal || !partyVal) {
+          $('#candidateMsg').text('Please fill in both fields.').css('color', '#f85149');
           return;
         }
         $(this).prop('disabled', true).text('Adding...');
-        instance.addCandidate(nameCandidate, partyCandidate).then(function () {
-          $('#candidateMsg').text('Candidate added successfully!').removeClass('error');
+        App.instance.addCandidate(App.selectedElectionId, nameVal, partyVal).then(function () {
+          $('#candidateMsg').text('Candidate added successfully!').css('color', '#3fb950');
           $('#name').val('');
           $('#party').val('');
           $('#addCandidate').prop('disabled', false).html(
             '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add Candidate'
           );
-          App.loadCandidates(instance);
+          App.loadCandidates(App.instance, App.selectedElectionId);
         }).catch(function (err) {
-          $('#candidateMsg').text('Error: ' + err.message).addClass('error');
+          $('#candidateMsg').text('Error: ' + err.message).css('color', '#f85149');
           $('#addCandidate').prop('disabled', false);
         });
       });
 
       $('#addDate').click(function () {
-        var startDate = Date.parse(document.getElementById("startDate").value) / 1000;
-        var endDate   = Date.parse(document.getElementById("endDate").value) / 1000;
+        if (!App.selectedElectionId) {
+          $('#dateMsg').text('Select an election first.').css('color', '#f85149');
+          return;
+        }
+        var startDate = Date.parse(document.getElementById('startDate').value) / 1000;
+        var endDate   = Date.parse(document.getElementById('endDate').value) / 1000;
         if (!startDate || !endDate) {
-          $('#dateMsg').text('Please select both dates.').addClass('error');
+          $('#dateMsg').text('Please select both dates.').css('color', '#f85149');
           return;
         }
         $(this).prop('disabled', true).text('Setting...');
-        instance.setDates(startDate, endDate).then(function () {
-          $('#dateMsg').text('Voting dates set successfully!').removeClass('error');
+        App.instance.setDates(App.selectedElectionId, startDate, endDate).then(function () {
+          $('#dateMsg').text('Voting dates set successfully!').css('color', '#3fb950');
           $('#addDate').prop('disabled', false).html(
             '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Set Voting Dates'
           );
         }).catch(function (err) {
-          $('#dateMsg').text('Error: ' + err.message).addClass('error');
+          $('#dateMsg').text('Error: ' + err.message).css('color', '#f85149');
           $('#addDate').prop('disabled', false);
         });
       });
     });
+  },
 
-    // --- Load candidates ---
-    App.loadCandidates(instance);
+  // ── Voter ─────────────────────────────────────────────────────────────────
 
-    // --- Check if already voted (voter page only) ---
-    instance.checkVote().then(function (voted) {
-      if (!voted) {
-        $("#voteButton").attr("disabled", false);
-      } else {
-        $("#voteButton").attr("disabled", true);
-        $("#msg").text("You have already cast your vote. Thank you!").css('color', '#3fb950');
+  initVoter: function () {
+    App.loadElectionTabs('voter');
+  },
+
+  // ── Elections ─────────────────────────────────────────────────────────────
+
+  loadElectionTabs: function (mode) {
+    App.instance.getCountElections().then(function (countRaw) {
+      var count = parseInt(countRaw);
+
+      if (mode === 'admin') {
+        $('#electionCount').text(count + ' election' + (count !== 1 ? 's' : ''));
       }
+
+      if (count === 0) {
+        var emptyMsg = mode === 'admin'
+          ? '<div class="empty-state">No elections yet. Create one above.</div>'
+          : '<div class="empty-state">No elections have been created yet. Check back later.</div>';
+        if (mode === 'admin') $('#electionTabs').html(emptyMsg);
+        else $('#electionTabsWrapper').html(emptyMsg);
+        return;
+      }
+
+      var promises = [];
+      for (var i = 1; i <= count; i++) {
+        promises.push(App.instance.getElection(i));
+      }
+
+      Promise.all(promises).then(function (elections) {
+        var tabsHtml = '<div class="election-tabs">';
+        elections.forEach(function (e) {
+          var id   = parseInt(e[0]);
+          var name = e[1];
+          tabsHtml += '<button class="election-tab" data-id="' + id + '" onclick="App.selectElection(' + id + ', \'' + mode + '\')">' + name + '</button>';
+        });
+        tabsHtml += '</div>';
+
+        if (mode === 'admin') {
+          $('#electionTabs').html(tabsHtml);
+        } else {
+          $('#electionTabsWrapper').html(tabsHtml);
+        }
+
+        // Auto-select the first election
+        if (elections.length > 0) {
+          App.selectElection(parseInt(elections[0][0]), mode);
+        }
+      }).catch(function (err) {
+        console.error('loadElectionTabs error:', err.message);
+      });
     });
   },
 
-  loadCandidates: function (instance) {
-    instance.getCountCandidates().then(function (countCandidates) {
-      var count = parseInt(countCandidates);
+  selectElection: function (electionId, mode) {
+    App.selectedElectionId = electionId;
+
+    // Highlight active tab
+    $('.election-tab').removeClass('active');
+    $('.election-tab[data-id="' + electionId + '"]').addClass('active');
+
+    App.instance.getElection(electionId).then(function (e) {
+      var name      = e[1];
+      var startTs   = parseInt(e[2]);
+      var endTs     = parseInt(e[3]);
+
+      if (mode === 'admin') {
+        $('#managingElectionName').text(name);
+        $('#electionManagement').show();
+        App.loadCandidates(App.instance, electionId);
+      } else {
+        $('#electionTitle').text(name);
+
+        if (startTs === 0) {
+          $('#dates').text('Voting period not set yet');
+        } else {
+          var start = new Date(startTs * 1000);
+          var end   = new Date(endTs * 1000);
+          $('#dates').text(
+            start.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) +
+            ' — ' +
+            end.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+          );
+        }
+
+        $('#electionView').show();
+        $('#msg').text('').css('color', '');
+        $('#voteButton').attr('disabled', true);
+
+        App.loadCandidates(App.instance, electionId);
+
+        // Check if voter already voted in this election
+        App.instance.checkVote(electionId).then(function (voted) {
+          if (voted) {
+            $('#voteButton').attr('disabled', true);
+            $('#msg').text('You have already cast your vote in this election. Thank you!').css('color', '#3fb950');
+          } else {
+            // Enable only after a candidate is selected
+            $('#voteButton').attr('disabled', true);
+          }
+        });
+      }
+    }).catch(function (err) {
+      console.error('selectElection error:', err.message);
+    });
+  },
+
+  // ── Candidates ────────────────────────────────────────────────────────────
+
+  loadCandidates: function (instance, electionId) {
+    instance.getCountCandidates(electionId).then(function (countRaw) {
+      var count = parseInt(countRaw);
 
       $('#candidateCount').text(count + ' candidate' + (count !== 1 ? 's' : ''));
 
@@ -167,7 +261,7 @@ window.App = {
 
       var promises = [];
       for (var i = 1; i <= count; i++) {
-        promises.push(instance.getCandidate(i));
+        promises.push(instance.getCandidate(electionId, i));
       }
 
       Promise.all(promises).then(function (candidates) {
@@ -236,46 +330,53 @@ window.App = {
         }, 100);
 
       }).catch(function (err) {
-        console.error("loadCandidates error:", err.message);
+        console.error('loadCandidates error:', err.message);
       });
     });
   },
 
   selectCandidate: function (el, id) {
+    // Don't allow selection if already voted
+    if ($('#voteButton').attr('disabled') && $('#msg').css('color') === 'rgb(63, 185, 80)') return;
     $('.candidate-card').removeClass('selected');
     $('input[name="candidate"]').prop('checked', false);
     $(el).addClass('selected');
     $('#c' + id).prop('checked', true);
+    $('#voteButton').attr('disabled', false);
   },
 
   vote: function () {
-    var candidateID = $("input[name='candidate']:checked").val();
-    if (!candidateID) {
-      $("#msg").text("Please select a candidate before voting.").css('color', '#f85149');
+    if (!App.selectedElectionId) {
+      $('#msg').text('Please select an election first.').css('color', '#f85149');
       return;
     }
-    $("#voteButton").attr("disabled", true).text("Submitting...");
-    $("#msg").text("Waiting for blockchain confirmation...").css('color', '#8b949e');
+    var candidateID = $("input[name='candidate']:checked").val();
+    if (!candidateID) {
+      $('#msg').text('Please select a candidate before voting.').css('color', '#f85149');
+      return;
+    }
+    $('#voteButton').attr('disabled', true).text('Submitting...');
+    $('#msg').text('Waiting for blockchain confirmation...').css('color', '#8b949e');
 
-    VotingContract.deployed().then(function (instance) {
-      instance.vote(parseInt(candidateID)).then(function () {
-        $("#msg").text("Vote cast successfully! Thank you for participating.").css('color', '#3fb950');
-        setTimeout(function () { window.location.reload(); }, 2000);
-      });
+    App.instance.vote(App.selectedElectionId, parseInt(candidateID)).then(function () {
+      $('#msg').text('Vote cast successfully! Thank you for participating.').css('color', '#3fb950');
+      setTimeout(function () { window.location.reload(); }, 2000);
     }).catch(function (err) {
-      console.error("vote error:", err.message);
-      $("#msg").text("Error: " + err.message).css('color', '#f85149');
-      $("#voteButton").attr("disabled", false).text("Cast Vote on Blockchain");
+      console.error('vote error:', err.message);
+      $('#msg').text('Error: ' + err.message).css('color', '#f85149');
+      $('#voteButton').attr('disabled', false).html(
+        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Cast Vote on Blockchain'
+      );
     });
   }
 };
 
-window.addEventListener("load", function () {
-  if (typeof window.ethereum !== "undefined") {
+window.addEventListener('load', function () {
+  if (typeof window.ethereum !== 'undefined') {
     window.eth = new Web3(window.ethereum);
   } else {
-    console.warn("No MetaMask detected. Falling back to http://127.0.0.1:7545");
-    window.eth = new Web3(new Web3.providers.HttpProvider("http://127.0.0.1:8545"));
+    console.warn('No MetaMask detected. Falling back to http://127.0.0.1:8545');
+    window.eth = new Web3(new Web3.providers.HttpProvider('http://127.0.0.1:8545'));
   }
   window.App.eventStart();
 });
