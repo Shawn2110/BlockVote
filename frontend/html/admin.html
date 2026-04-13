@@ -33,17 +33,19 @@
 
   <main class="main-content">
 
-    <!-- Election Name Card (full width) -->
+    <!-- Create Election Card -->
     <div class="admin-card election-card">
       <div class="card-header">
         <div class="card-icon election-icon">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M3 3h18v4H3z"/><path d="M3 10h18v4H3z"/><path d="M3 17h18v4H3z"/>
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <line x1="12" y1="8" x2="12" y2="16"/>
+            <line x1="8" y1="12" x2="16" y2="12"/>
           </svg>
         </div>
         <div>
-          <h2>Election Setup</h2>
-          <p>Set the name of this election — shown to all voters</p>
+          <h2>Create Election</h2>
+          <p>Add a new election to the blockchain — voters will see all active elections</p>
         </div>
       </div>
       <div class="form-row">
@@ -52,103 +54,128 @@
           <input id="electionNameInput" type="text" placeholder="e.g. Student Council Election 2026" autocomplete="off">
         </div>
       </div>
-      <button id="setElection" class="action-btn election-btn">
+      <button id="createElectionBtn" class="action-btn election-btn">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <polyline points="20 6 9 17 4 12"/>
+          <line x1="12" y1="5" x2="12" y2="19"/>
+          <line x1="5" y1="12" x2="19" y2="12"/>
         </svg>
-        Set Election Name
+        Create Election
       </button>
       <p id="electionMsg" class="status-msg"></p>
     </div>
 
-    <div class="admin-grid">
-
-      <!-- Add Candidate Card -->
-      <div class="admin-card">
-        <div class="card-header">
-          <div class="card-icon candidate-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
-              <circle cx="9" cy="7" r="4"/>
-              <line x1="19" y1="8" x2="19" y2="14"/>
-              <line x1="22" y1="11" x2="16" y2="11"/>
-            </svg>
-          </div>
-          <div>
-            <h2>Add Candidate</h2>
-            <p>Register a new candidate to the blockchain</p>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="name">Full Name</label>
-            <input id="name" type="text" placeholder="e.g. Alice Johnson" autocomplete="off">
-          </div>
-          <div class="form-group">
-            <label for="party">Party / Alliance</label>
-            <input id="party" type="text" placeholder="e.g. Progressive Party">
-          </div>
-        </div>
-        <button id="addCandidate" class="action-btn">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <line x1="12" y1="5" x2="12" y2="19"/>
-            <line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
-          Add Candidate
-        </button>
-        <p id="candidateMsg" class="status-msg"></p>
-      </div>
-
-      <!-- Set Voting Dates Card -->
-      <div class="admin-card">
-        <div class="card-header">
-          <div class="card-icon date-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-              <line x1="16" y1="2" x2="16" y2="6"/>
-              <line x1="8" y1="2" x2="8" y2="6"/>
-              <line x1="3" y1="10" x2="21" y2="10"/>
-            </svg>
-          </div>
-          <div>
-            <h2>Voting Period</h2>
-            <p>Set the start and end dates for the election</p>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="startDate">Start Date</label>
-            <input id="startDate" type="date">
-          </div>
-          <div class="form-group">
-            <label for="endDate">End Date</label>
-            <input id="endDate" type="date">
-          </div>
-        </div>
-        <button id="addDate" class="action-btn date-btn">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <polyline points="20 6 9 17 4 12"/>
-          </svg>
-          Set Voting Dates
-        </button>
-        <p id="dateMsg" class="status-msg"></p>
-      </div>
-
-    </div><!-- end admin-grid -->
-
-    <!-- Current Candidates List -->
-    <div class="candidates-section">
+    <!-- Election Tabs -->
+    <div class="election-tabs-section">
       <div class="section-header">
-        <h2>Registered Candidates</h2>
-        <span id="candidateCount" class="count-badge">0 candidates</span>
+        <h2>Manage Elections</h2>
+        <span id="electionCount" class="count-badge">0 elections</span>
       </div>
-      <div id="boxCandidate" class="candidates-list">
+      <div id="electionTabs" class="election-tabs">
         <div class="loading-state">
           <div class="loading-spinner"></div>
-          <p>Loading from blockchain...</p>
+          <p>Loading elections from blockchain...</p>
         </div>
       </div>
     </div>
+
+    <!-- Selected Election Management (hidden until election selected) -->
+    <div id="electionManagement" class="election-management" style="display:none">
+
+      <div class="management-header">
+        <div class="management-title">
+          <span class="managing-label">Managing:</span>
+          <span id="managingElectionName" class="managing-name"></span>
+        </div>
+      </div>
+
+      <div class="admin-grid">
+
+        <!-- Add Candidate Card -->
+        <div class="admin-card">
+          <div class="card-header">
+            <div class="card-icon candidate-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <line x1="19" y1="8" x2="19" y2="14"/>
+                <line x1="22" y1="11" x2="16" y2="11"/>
+              </svg>
+            </div>
+            <div>
+              <h2>Add Candidate</h2>
+              <p>Register a new candidate to this election</p>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="name">Full Name</label>
+              <input id="name" type="text" placeholder="e.g. Alice Johnson" autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label for="party">Party / Alliance</label>
+              <input id="party" type="text" placeholder="e.g. Progressive Party">
+            </div>
+          </div>
+          <button id="addCandidate" class="action-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Add Candidate
+          </button>
+          <p id="candidateMsg" class="status-msg"></p>
+        </div>
+
+        <!-- Set Voting Dates Card -->
+        <div class="admin-card">
+          <div class="card-header">
+            <div class="card-icon date-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+            </div>
+            <div>
+              <h2>Voting Period</h2>
+              <p>Set the start and end dates for this election</p>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="startDate">Start Date</label>
+              <input id="startDate" type="date">
+            </div>
+            <div class="form-group">
+              <label for="endDate">End Date</label>
+              <input id="endDate" type="date">
+            </div>
+          </div>
+          <button id="addDate" class="action-btn date-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            Set Voting Dates
+          </button>
+          <p id="dateMsg" class="status-msg"></p>
+        </div>
+
+      </div><!-- end admin-grid -->
+
+      <!-- Candidates List for selected election -->
+      <div class="candidates-section">
+        <div class="section-header">
+          <h2>Registered Candidates</h2>
+          <span id="candidateCount" class="count-badge">0 candidates</span>
+        </div>
+        <div id="boxCandidate" class="candidates-list">
+          <div class="empty-state">Select an election above to view its candidates.</div>
+        </div>
+      </div>
+
+    </div><!-- end electionManagement -->
+
   </main>
 
   <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
