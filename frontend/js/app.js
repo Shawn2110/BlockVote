@@ -1,6 +1,6 @@
 const Web3 = require('web3');
 const contract = require('@truffle/contract');
-const votingArtifacts = require('../../build/contracts/Voting.json');
+const votingArtifacts = require('../../blockchain/build/contracts/Voting.json');
 var VotingContract = contract(votingArtifacts);
 
 window.App = {

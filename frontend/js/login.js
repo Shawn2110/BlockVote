@@ -19,11 +19,7 @@ loginForm.addEventListener('submit', (event) => {
   if (btnSpinner) btnSpinner.style.display = 'inline-block';
   if (errorMsg)   errorMsg.textContent = '';
 
-  const headers = {
-    'Authorization': `Bearer ${voter_id}`,
-  };
-
-  fetch(`http://127.0.0.1:8000/login?voter_id=${voter_id}&password=${password}`, { headers })
+  fetch(`/login?voter_id=${encodeURIComponent(voter_id)}&password=${encodeURIComponent(password)}`)
     .then(response => {
       if (response.ok) {
         return response.json();
@@ -34,10 +30,10 @@ loginForm.addEventListener('submit', (event) => {
     .then(data => {
       if (data.role === 'admin') {
         localStorage.setItem('jwtTokenAdmin', data.token);
-        window.location.replace(`http://localhost:8080/admin.html?Authorization=Bearer ${data.token}`);
+        window.location.replace(`/admin.html?Authorization=Bearer ${data.token}`);
       } else if (data.role === 'user') {
         localStorage.setItem('jwtTokenVoter', data.token);
-        window.location.replace(`http://localhost:8080/index.html?Authorization=Bearer ${data.token}`);
+        window.location.replace(`/index.html?Authorization=Bearer ${data.token}`);
       }
     })
     .catch(error => {

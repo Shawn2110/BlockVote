@@ -1,190 +1,182 @@
-# BlockVote - Decentralized Voting System
+# BlockVote — Decentralized Voting System
 
-A secure and transparent voting system built on the Ethereum blockchain. BlockVote ensures tamper-proof voting records, enabling users to cast votes remotely while maintaining anonymity and preventing fraud through smart contracts.
+A secure and transparent voting system built on the Ethereum blockchain. Votes are recorded immutably on-chain via a Solidity smart contract, while a lightweight Node.js + SQLite backend handles authentication.
 
-## Features
-
-- **Blockchain-Powered Voting** — Votes are recorded on the Ethereum blockchain, making them immutable and transparent
-- **JWT Authentication** — Secure voter authentication and role-based authorization (admin/voter)
-- **Admin Dashboard** — Manage candidates, set voting periods, and monitor live results
-- **Live Vote Tracking** — Real-time progress bars showing vote distribution across candidates
-- **One-Vote-Per-Address** — Smart contract enforces single vote per Ethereum address
-- **Modern Dark UI** — Glassmorphism design with animated elements and responsive layout
-- **Multi-User Support** — 10 pre-configured voter accounts and 1 admin account for demo
+---
 
 ## Tech Stack
 
 | Layer | Technology |
-|-------|-----------|
-| Smart Contract | Solidity (v0.5.16) |
+|-------|------------|
+| Smart Contract | Solidity ^0.5.15 |
 | Blockchain | Ethereum (Ganache local) |
-| Frontend | HTML5, CSS3, JavaScript, jQuery |
-| Backend | Node.js + Express (port 8080) |
-| API | Python FastAPI (port 8000) |
-| Database | MySQL |
+| Frontend | HTML5, CSS3, Vanilla JS, jQuery |
+| Backend | Node.js + Express |
+| Database | SQLite (better-sqlite3) |
 | Auth | JSON Web Tokens (JWT) |
 | Wallet | MetaMask |
 | Build | Truffle, Browserify |
 
-## Prerequisites
-
-- Node.js (v18+)
-- Python (v3.9+)
-- MySQL Server
-- MetaMask browser extension
-- Truffle (`npm install -g truffle`)
-
-## Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/Shawn2110/BlockVote.git
-   cd BlockVote
-   ```
-
-2. **Install Node.js dependencies**
-   ```bash
-   npm install
-   ```
-
-3. **Install Python dependencies**
-   ```bash
-   pip install fastapi mysql-connector-python pydantic python-dotenv uvicorn uvicorn[standard] PyJWT
-   ```
-
-4. **Set up MySQL database**
-   ```sql
-   CREATE DATABASE voter_db;
-   USE voter_db;
-
-   CREATE TABLE voters (
-     voter_id VARCHAR(36) PRIMARY KEY NOT NULL,
-     role ENUM('admin', 'user') NOT NULL,
-     password VARCHAR(255) NOT NULL
-   );
-
-   INSERT INTO voters (voter_id, role, password) VALUES
-     ('admin-001', 'admin', 'admin123'),
-     ('voter-001', 'user', 'alice2024'),
-     ('voter-002', 'user', 'bob2024'),
-     ('voter-003', 'user', 'carol2024'),
-     ('voter-004', 'user', 'dave2024'),
-     ('voter-005', 'user', 'emma2024'),
-     ('voter-006', 'user', 'frank2024'),
-     ('voter-007', 'user', 'grace2024'),
-     ('voter-008', 'user', 'henry2024'),
-     ('voter-009', 'user', 'iris2024'),
-     ('voter-010', 'user', 'jake2024');
-   ```
-
-5. **Configure database credentials**
-
-   Create `Database_API/.env`:
-   ```
-   MYSQL_USER="root"
-   MYSQL_PASSWORD="your_password"
-   MYSQL_HOST="localhost"
-   MYSQL_DB="voter_db"
-   SECRET_KEY="your_secret_key_here"
-   ```
-
-6. **Set up MetaMask**
-   - Install the [MetaMask](https://metamask.io/download/) browser extension
-   - Add a custom network:
-
-     | Field | Value |
-     |-------|-------|
-     | Network Name | Localhost 7545 |
-     | RPC URL | http://127.0.0.1:7545 |
-     | Chain ID | 1337 |
-     | Currency | ETH |
-
-## Usage
-
-1. **Start Ganache** (local blockchain)
-   ```bash
-   npx ganache --port 7545 --networkId 1337 --deterministic
-   ```
-
-2. **Compile and migrate smart contracts**
-   ```bash
-   truffle compile
-   truffle migrate
-   ```
-
-3. **Bundle JavaScript**
-   ```bash
-   npx browserify ./src/js/app.js -o ./src/dist/app.bundle.js
-   npx browserify ./src/js/login.js -o ./src/dist/login.bundle.js
-   ```
-
-4. **Start the Node.js server**
-   ```bash
-   node index.js
-   ```
-
-5. **Start the API server** (in a new terminal)
-   ```bash
-   cd Database_API
-   uvicorn main:app --reload --host 127.0.0.1
-   ```
-
-6. **Open the app** at http://localhost:8080
-
-## Demo Accounts
-
-| Voter ID | Role | Password |
-|----------|------|----------|
-| admin-001 | Admin | admin123 |
-| voter-001 | Voter | alice2024 |
-| voter-002 | Voter | bob2024 |
-| voter-003 | Voter | carol2024 |
-| voter-004 | Voter | dave2024 |
-| voter-005 | Voter | emma2024 |
-| voter-006 | Voter | frank2024 |
-| voter-007 | Voter | grace2024 |
-| voter-008 | Voter | henry2024 |
-| voter-009 | Voter | iris2024 |
-| voter-010 | Voter | jake2024 |
-
-## How It Works
-
-1. **Admin Setup** — Log in as admin to add candidates and set voting dates
-2. **Voter Login** — Voters authenticate with their ID and password via the FastAPI backend
-3. **Cast Vote** — Select a candidate and submit; MetaMask signs the transaction
-4. **Blockchain Record** — The smart contract validates the vote (correct time window, valid candidate, no double voting) and records it permanently
-5. **Live Results** — Vote counts and progress bars update in real-time
+---
 
 ## Project Structure
 
 ```
 BlockVote/
-├── contracts/              # Solidity smart contracts
-│   ├── Voting.sol          # Main voting contract
-│   └── Migrations.sol      # Truffle migration contract
-├── Database_API/           # Python FastAPI backend
-│   └── main.py             # Authentication API
-├── migrations/             # Truffle deployment scripts
-│   └── 1_initial_migration.js
-├── src/
-│   ├── css/                # Stylesheets (dark theme)
-│   ├── html/               # HTML pages (login, voter, admin)
-│   ├── js/                 # Frontend JavaScript
-│   └── dist/               # Bundled JS (generated)
-├── index.js                # Express server
-├── truffle-config.js       # Truffle configuration
-└── package.json            # Node.js dependencies
+├── blockchain/
+│   ├── contracts/
+│   │   ├── Voting.sol              # Main voting smart contract
+│   │   └── Migrations.sol
+│   ├── migrations/
+│   │   ├── 1_initial_migration.js
+│   │   └── 2_deploy_contracts.js
+│   └── truffle-config.js
+│
+├── backend/
+│   ├── server.js                   # Express server (port 8080)
+│   ├── db/
+│   │   ├── database.js             # SQLite schema
+│   │   └── seed.js                 # Populates voter accounts
+│   ├── routes/auth.js              # GET /login
+│   └── middleware/auth.js          # JWT check
+│
+├── frontend/
+│   ├── html/                       # login, voter, admin pages
+│   ├── css/
+│   ├── js/
+│   │   ├── login.js
+│   │   └── app.js                  # Web3 + contract interaction
+│   ├── assets/
+│   └── dist/                       # Bundled JS (generated)
+│
+├── .env                            # SECRET_KEY
+└── package.json
 ```
 
-## Smart Contract
+---
 
-The `Voting.sol` contract handles:
-- **addCandidate()** — Register a new candidate (admin)
-- **vote()** — Cast a vote with validation (time window, single vote, valid candidate)
-- **setDates()** — Define the voting period (one-time, admin)
-- **getCandidate()** — Retrieve candidate details and vote count
-- **checkVote()** — Check if the current address has already voted
+## Local Setup
+
+### 1. Install global tools
+
+```bash
+npm install -g truffle ganache
+```
+
+### 2. Install dependencies
+
+```bash
+npm install
+```
+
+### 3. Configure the JWT secret
+
+Edit `.env` in the project root:
+
+```
+SECRET_KEY=any_string_you_want
+```
+
+### 4. Set up MetaMask
+
+Install the [MetaMask](https://metamask.io/download/) browser extension, then add a custom network:
+
+| Field | Value |
+|-------|-------|
+| Network Name | Ganache |
+| RPC URL | `http://127.0.0.1:7545` |
+| Chain ID | `1337` |
+| Currency | ETH |
+
+---
+
+## Running the App
+
+### Terminal 1 — Start the blockchain
+
+```bash
+ganache --port 7545 --networkId 1337
+```
+
+Keep this running. It prints 10 funded test accounts with private keys.
+
+### Terminal 2 — Deploy contracts, bundle, and start
+
+```bash
+cd blockchain
+truffle compile
+truffle migrate --network development
+cd ..
+
+npm run bundle
+npm run seed       # first time only — creates voters.db
+npm start
+```
+
+Open **http://localhost:8080**.
+
+---
+
+## npm Scripts
+
+| Script | What it does |
+|--------|-------------|
+| `npm start` | Start Express server on port 8080 |
+| `npm run seed` | Create and populate `backend/voters.db` |
+| `npm run bundle` | Browserify `app.js` and `login.js` into `frontend/dist/` |
+
+---
+
+## Demo Accounts
+
+| Voter ID | Password | Role |
+|----------|----------|------|
+| `admin` | `admin123` | Admin |
+| `voter1` | `pass1` | Voter |
+| `voter2` – `voter10` | `pass2` – `pass10` | Voter |
+
+---
+
+## Workflow
+
+1. **Admin** — Log in as `admin`, add candidates, set the voting start and end dates
+2. **Voters** — Log in as `voter1`–`voter10`, select a candidate, click **Cast Vote**
+3. MetaMask will prompt you to confirm the blockchain transaction
+4. Vote counts update live on the voter and admin pages
+
+---
+
+## How the Auth Flow Works
+
+```
+Login form → POST /login (Express + SQLite)
+           → JWT returned → stored in localStorage
+           → redirected to /index.html?Authorization=Bearer <token>
+           → Express middleware verifies JWT before serving the page
+```
+
+Voting and results are read/written directly to the smart contract via MetaMask — the backend is only involved in authentication.
+
+---
+
+## Smart Contract (`Voting.sol`)
+
+| Function | Description |
+|----------|-------------|
+| `addCandidate(name, party)` | Register a new candidate |
+| `setDates(start, end)` | Set the voting period (one-time) |
+| `vote(candidateID)` | Cast a vote |
+| `checkVote()` | Returns true if the caller has already voted |
+| `getCandidate(id)` | Returns candidate details and vote count |
+| `getDates()` | Returns voting start/end timestamps |
+
+Enforced by the contract:
+- Votes only accepted within the voting window
+- One vote per Ethereum address
+- Candidate ID must exist
+
+---
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+[MIT](LICENSE)

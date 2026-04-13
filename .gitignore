@@ -1,5 +1,6 @@
 node_modules
-build
+blockchain/build
+frontend/dist
+backend/voters.db
 package-lock.json
-Database_API/.env
-src/dist/
+.env

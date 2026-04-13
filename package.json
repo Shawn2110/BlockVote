@@ -1,19 +1,20 @@
 {
-  "name": "decentralized-voting",
+  "name": "blockvote",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Decentralized voting system on Ethereum",
+  "main": "backend/server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node backend/server.js",
+    "seed": "node backend/db/seed.js",
+    "bundle": "browserify frontend/js/app.js --ignore cheerio -o frontend/dist/app.bundle.js && browserify frontend/js/login.js -o frontend/dist/login.bundle.js"
   },
-  "author": "",
-  "license": "ISC",
   "dependencies": {
-    "jsonwebtoken": "^9.0.0",
     "@truffle/contract": "^4.6.18",
+    "better-sqlite3": "^12.9.0",
     "browserify": "^17.0.0",
     "dotenv": "^16.0.3",
     "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.0",
     "web3": "^1.9.0"
   }
 }
