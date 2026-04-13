@@ -28,12 +28,26 @@ window.App = {
 
     var instance;
     try {
+      // Try deployed() first (uses network ID lookup)
       instance = await VotingContract.deployed();
     } catch (err) {
-      var msg = 'Contract not found on this network. Switch MetaMask to Ganache (RPC: http://127.0.0.1:7545, Chain ID: 1337) and refresh.';
-      $('#boxCandidate').html('<div class="empty-state" style="color:#f85149">' + msg + '</div>');
-      $("#dates").text("Network error — check MetaMask");
-      return;
+      // Fallback: use the address directly from artifacts
+      var networks = votingArtifacts.networks;
+      var networkKeys = Object.keys(networks);
+      if (networkKeys.length === 0) {
+        $('#boxCandidate').html('<div class="empty-state" style="color:#f85149">No deployed contract found. Run truffle migrate and rebuild the bundle.</div>');
+        $("#dates").text("Contract not deployed");
+        return;
+      }
+      // Use the most recently deployed address
+      var latestAddress = networks[networkKeys[networkKeys.length - 1]].address;
+      try {
+        instance = await VotingContract.at(latestAddress);
+      } catch (err2) {
+        $('#boxCandidate').html('<div class="empty-state" style="color:#f85149">Could not connect to contract at ' + latestAddress + '. Make sure MetaMask is on Localhost 8545 and refresh.</div>');
+        $("#dates").text("Network error — check MetaMask");
+        return;
+      }
     }
 
     // --- Voting dates ---
