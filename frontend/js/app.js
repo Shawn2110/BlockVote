@@ -13,19 +13,21 @@ window.App = {
       return;
     }
 
+    var accounts;
     try {
-      await window.ethereum.request({ method: 'eth_requestAccounts' });
+      accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
     } catch (err) {
       alert('MetaMask connection rejected. Please approve the connection and refresh.');
       return;
     }
 
-    VotingContract.setProvider(window.ethereum);
-    VotingContract.defaults({ from: window.ethereum.selectedAddress, gas: 6654755 });
+    var web3Provider = new Web3(window.ethereum);
+    VotingContract.setProvider(web3Provider.currentProvider);
+    VotingContract.defaults({ from: accounts[0], gas: 6654755 });
 
-    App.account = window.ethereum.selectedAddress;
+    App.account = accounts[0];
 
-    var addr = window.ethereum.selectedAddress;
+    var addr = accounts[0];
     var short = addr ? addr.slice(0, 6) + '...' + addr.slice(-4) : '';
     $('#accountAddress').text(short);
 
@@ -40,7 +42,8 @@ window.App = {
         if ($('#electionTabs').length) $('#electionTabs').html(errHtml);
         return;
       }
-      var latestAddress = networks[networkKeys[networkKeys.length - 1]].address;
+      var preferredKey = networks['1337'] ? '1337' : networkKeys[networkKeys.length - 1];
+      var latestAddress = networks[preferredKey].address;
       try {
         App.instance = await VotingContract.at(latestAddress);
       } catch (err2) {

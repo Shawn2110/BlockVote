@@ -3,6 +3,7 @@ const path = require('path');
 const jwt = require('jsonwebtoken');
 
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+require('./db/seed');
 
 const authRouter = require('./routes/auth');
 const authorizeUser = require('./middleware/auth');

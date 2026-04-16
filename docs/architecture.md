@@ -6,27 +6,27 @@
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                            BROWSER (Client)                             │
 │                                                                         │
-│   ┌─────────────┐      ┌──────────────────┐      ┌─────────────────┐  │
-│   │  login.html │      │   index.html     │      │   admin.html    │  │
-│   │  login.js   │      │   app.bundle.js  │      │  app.bundle.js  │  │
-│   └──────┬──────┘      └────────┬─────────┘      └────────┬────────┘  │
+│   ┌─────────────┐      ┌──────────────────┐      ┌─────────────────┐    │
+│   │  login.html │      │   index.html     │      │   admin.html    │    │
+│   │  login.js   │      │   app.bundle.js  │      │  app.bundle.js  │    │
+│   └──────┬──────┘      └────────┬─────────┘      └────────┬────────┘    │
 │          │                      │                          │            │
 │          │ fetch /login         │ Web3 + MetaMask          │            │
 └──────────┼──────────────────────┼──────────────────────────┼────────────┘
            │                      │                          │
            ▼                      ▼                          ▼
 ┌──────────────────────┐   ┌───────────────────────────────────────────┐
-│   EXPRESS SERVER     │   │              MetaMask Wallet               │
-│   backend/server.js  │   │   Signs & broadcasts Ethereum transactions │
+│   EXPRESS SERVER     │   │              MetaMask Wallet              │
+│   backend/server.js  │   │   Signs & broadcasts Ethereum transactions│
 │   :8080              │   └──────────────────────┬────────────────────┘
 │                      │                          │
 │  Routes:             │                          │ JSON-RPC
 │  GET /               │                          ▼
 │  GET /login ─────────┤─────►  ┌────────────────────────────────────┐
-│  GET /index.html     │        │        GANACHE (Local Chain)        │
-│  GET /admin.html     │        │        http://127.0.0.1:8545        │
-│  GET /css/*          │        │        Network ID: 1337             │
-│  GET /js/*           │        │                                     │
+│  GET /index.html     │        │        GANACHE (Local Chain)       │
+│  GET /admin.html     │        │        http://127.0.0.1:8545       │
+│  GET /css/*          │        │        Network ID: 1337            │
+│  GET /js/*           │        │                                    │
 │  GET /dist/*         │        │   ┌─────────────────────────────┐  │
 │                      │        │   │     Voting.sol Contract     │  │
 └──────────┬───────────┘        │   │                             │  │
@@ -217,10 +217,10 @@ Admin logs in → /admin.html
 │  CLIENT LOGIC LAYER (frontend/js/)                       │
 │  login.js  — form submit, fetch /login, redirect         │
 │  app.js    — Web3 init, multi-election contract calls    │
-│              App.loadElectionTabs()                       │
-│              App.selectElection()                         │
-│              App.loadCandidates()                         │
-│              App.vote()                                   │
+│              App.loadElectionTabs()                      │
+│              App.selectElection()                        │
+│              App.loadCandidates()                        │
+│              App.vote()                                  │
 ├──────────────────────────────────────────────────────────┤
 │  SERVER LAYER (backend/)                                 │
 │  server.js          — Express routes + static files      │
