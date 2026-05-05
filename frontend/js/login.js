@@ -14,7 +14,6 @@ loginForm.addEventListener('submit', (event) => {
     return;
   }
 
-  // Show spinner
   if (btnText)    btnText.style.display = 'none';
   if (btnSpinner) btnSpinner.style.display = 'inline-block';
   if (errorMsg)   errorMsg.textContent = '';
@@ -28,6 +27,12 @@ loginForm.addEventListener('submit', (event) => {
       }
     })
     .then(data => {
+      if (data.eth_address) {
+        localStorage.setItem('bvBoundAddress', data.eth_address);
+      } else {
+        localStorage.removeItem('bvBoundAddress');
+      }
+
       if (data.role === 'admin') {
         localStorage.setItem('jwtTokenAdmin', data.token);
         window.location.replace(`/admin.html?Authorization=Bearer ${data.token}`);
