@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>BlockVote — Cast Your Vote</title>
+  <script>(function(){var t=localStorage.getItem('bvtheme')||'dark';document.documentElement.setAttribute('data-theme',t);})();</script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="../css/index.css">
 </head>
@@ -22,6 +23,7 @@
           <span class="wallet-dot"></span>
           <span id="accountAddress" class="wallet-address">Connecting...</span>
         </div>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span id="themeIcon">☀</span></button>
         <a href="/" class="logout-btn">Logout</a>
       </div>
     </div>
@@ -29,8 +31,8 @@
 
   <main class="main-content">
     <div class="page-hero">
-      <h1>Active Elections</h1>
-      <p>Select an election below, choose your candidate, and cast your vote on the Ethereum blockchain</p>
+      <h1>active.elections</h1>
+      <p>select an election · choose a candidate · sign &amp; broadcast to ethereum</p>
     </div>
 
     <!-- Election Tabs -->
@@ -79,5 +81,9 @@
 
   <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
   <script src="../dist/app.bundle.js"></script>
+  <script>
+    function toggleTheme(){var d=document.documentElement;var t=d.getAttribute('data-theme')==='light'?'dark':'light';d.setAttribute('data-theme',t);localStorage.setItem('bvtheme',t);var i=document.getElementById('themeIcon');if(i)i.textContent=t==='light'?'☾':'☀';}
+    (function(){var t=document.documentElement.getAttribute('data-theme')||'dark';var i=document.getElementById('themeIcon');if(i)i.textContent=t==='light'?'☾':'☀';})();
+  </script>
 </body>
 </html>
