@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>BlockVote — Admin Panel</title>
+  <script>(function(){var t=localStorage.getItem('bvtheme')||'dark';document.documentElement.setAttribute('data-theme',t);})();</script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="../css/admin.css">
 </head>
@@ -26,12 +27,64 @@
         </span>
       </div>
       <div class="header-right">
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span id="themeIcon">☀</span></button>
         <a href="/" class="logout-btn">Logout</a>
       </div>
     </div>
   </header>
 
   <main class="main-content">
+
+    <!-- Voter Registry Card -->
+    <div class="admin-card voter-registry-card">
+      <div class="card-header">
+        <div class="card-icon voter-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <line x1="19" y1="8" x2="19" y2="14"/>
+            <line x1="22" y1="11" x2="16" y2="11"/>
+          </svg>
+        </div>
+        <div>
+          <h2>Voter Registry</h2>
+          <p>Register voters and bind each one to a unique Ethereum address</p>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="newVoterId">Voter ID</label>
+          <input id="newVoterId" type="text" placeholder="e.g. voter1" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label for="newVoterPw">Password</label>
+          <input id="newVoterPw" type="text" placeholder="e.g. pass1" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label for="newVoterAddr">Ethereum Address</label>
+          <input id="newVoterAddr" type="text" placeholder="0x…" autocomplete="off">
+        </div>
+      </div>
+      <button id="registerVoterBtn" class="action-btn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="12" y1="5" x2="12" y2="19"/>
+          <line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        Register Voter
+      </button>
+      <p id="voterRegMsg" class="status-msg"></p>
+    </div>
+
+    <!-- Voters list -->
+    <div class="voters-section">
+      <div class="section-header">
+        <h2>Registered Voters</h2>
+        <span id="voterCount" class="count-badge">0 voters</span>
+      </div>
+      <div id="votersList" class="candidates-list">
+        <div class="empty-state">No voters registered yet.</div>
+      </div>
+    </div>
 
     <!-- Create Election Card -->
     <div class="admin-card election-card">
@@ -163,6 +216,17 @@
 
       </div><!-- end admin-grid -->
 
+      <!-- Eligible voters for selected election -->
+      <div class="eligibility-section">
+        <div class="section-header">
+          <h2>Eligible Voters for this Election</h2>
+          <span id="eligibilityCount" class="count-badge">0 eligible</span>
+        </div>
+        <div id="eligibilityList" class="candidates-list">
+          <div class="empty-state">Select an election above to manage eligibility.</div>
+        </div>
+      </div>
+
       <!-- Candidates List for selected election -->
       <div class="candidates-section">
         <div class="section-header">
@@ -180,5 +244,9 @@
 
   <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
   <script src="../dist/app.bundle.js"></script>
+  <script>
+    function toggleTheme(){var d=document.documentElement;var t=d.getAttribute('data-theme')==='light'?'dark':'light';d.setAttribute('data-theme',t);localStorage.setItem('bvtheme',t);var i=document.getElementById('themeIcon');if(i)i.textContent=t==='light'?'☾':'☀';}
+    (function(){var t=document.documentElement.getAttribute('data-theme')||'dark';var i=document.getElementById('themeIcon');if(i)i.textContent=t==='light'?'☾':'☀';})();
+  </script>
 </body>
 </html>
