@@ -4,9 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>BlockVote — Login</title>
+  <script>(function(){var t=localStorage.getItem('bvtheme')||'dark';document.documentElement.setAttribute('data-theme',t);})();</script>
   <link rel="stylesheet" href="../css/login.css">
 </head>
 <body>
+  <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span id="themeIcon">☀</span></button>
   <div class="bg-grid"></div>
   <div class="floating-orbs">
     <div class="orb orb-1"></div>
@@ -25,7 +27,7 @@
           </svg>
         </div>
         <h1>BlockVote</h1>
-        <p>Decentralized Voting on Ethereum</p>
+        <p>decentralized ballot · ethereum</p>
       </div>
 
       <form id="loginForm" autocomplete="off">
@@ -61,12 +63,16 @@
       <div class="login-footer">
         <span class="chain-badge">
           <span class="chain-dot"></span>
-          Ethereum Blockchain
+          ethereum · ganache · 1337
         </span>
       </div>
     </div>
   </div>
 
   <script src="../dist/login.bundle.js"></script>
+  <script>
+    function toggleTheme(){var d=document.documentElement;var t=d.getAttribute('data-theme')==='light'?'dark':'light';d.setAttribute('data-theme',t);localStorage.setItem('bvtheme',t);var i=document.getElementById('themeIcon');if(i)i.textContent=t==='light'?'☾':'☀';}
+    (function(){var t=document.documentElement.getAttribute('data-theme')||'dark';var i=document.getElementById('themeIcon');if(i)i.textContent=t==='light'?'☾':'☀';})();
+  </script>
 </body>
 </html>
