@@ -1,0 +1,9 @@
+FROM node:20-alpine
+
+RUN npm install -g ganache@7.9.2
+
+RUN mkdir -p /data
+
+EXPOSE 8545
+
+CMD ["sh", "-c", "ganache --host 0.0.0.0 --port ${PORT:-8545} --networkId 1337 --chainId 1337 --deterministic --db /data/chain"]
