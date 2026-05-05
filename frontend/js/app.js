@@ -6,6 +6,9 @@ var VotingContract = contract(votingArtifacts);
 window.App = {
   instance: null,
   selectedElectionId: null,
+  account: null,
+  boundAddress: null,
+  voters: [],
 
   eventStart: async function () {
     if (typeof window.ethereum === 'undefined') {
@@ -26,10 +29,11 @@ window.App = {
     VotingContract.defaults({ from: accounts[0], gas: 6654755 });
 
     App.account = accounts[0];
+    App.boundAddress = localStorage.getItem('bvBoundAddress');
 
     var addr = accounts[0];
     var short = addr ? addr.slice(0, 6) + '...' + addr.slice(-4) : '';
-    $('#accountAddress').text(short);
+    if ($('#accountAddress').length) $('#accountAddress').text(short);
 
     try {
       App.instance = await VotingContract.deployed();
@@ -56,6 +60,17 @@ window.App = {
 
     var isAdminPage = document.title.includes('Admin');
 
+    // Validate that the connected MetaMask account matches the bound address.
+    if (App.boundAddress && App.account.toLowerCase() !== App.boundAddress.toLowerCase()) {
+      var msg = 'Connect MetaMask account ' + App.boundAddress + ' (registered for this login).';
+      if (isAdminPage) {
+        if ($('#electionTabs').length) $('#electionTabs').html('<div class="empty-state" style="color:#f85149">' + msg + '</div>');
+      } else {
+        if ($('#electionTabsWrapper').length) $('#electionTabsWrapper').html('<div class="empty-state" style="color:#f85149">' + msg + '</div>');
+      }
+      return;
+    }
+
     if (isAdminPage) {
       App.initAdmin();
     } else {
@@ -65,10 +80,19 @@ window.App = {
 
   // ── Admin ─────────────────────────────────────────────────────────────────
 
+  adminToken: function () {
+    return localStorage.getItem('jwtTokenAdmin');
+  },
+
   initAdmin: function () {
+    App.loadVoters();
     App.loadElectionTabs('admin');
 
     $(document).ready(function () {
+
+      $('#registerVoterBtn').click(function () {
+        App.registerVoter();
+      });
 
       $('#createElectionBtn').click(function () {
         var name = $('#electionNameInput').val().trim();
@@ -141,6 +165,106 @@ window.App = {
     });
   },
 
+  // ── Voter Registry (admin only) ──────────────────────────────────────────
+
+  loadVoters: function () {
+    fetch('/admin/voters', {
+      headers: { 'Authorization': 'Bearer ' + App.adminToken() }
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (voters) {
+      App.voters = voters;
+      App.renderVoters();
+      if (App.selectedElectionId) {
+        App.loadEligibility(App.selectedElectionId);
+      }
+    })
+    .catch(function (err) {
+      console.error('loadVoters error:', err);
+    });
+  },
+
+  renderVoters: function () {
+    var nonAdmin = App.voters.filter(function (v) { return v.role !== 'admin'; });
+    $('#voterCount').text(nonAdmin.length + ' voter' + (nonAdmin.length !== 1 ? 's' : ''));
+
+    if (nonAdmin.length === 0) {
+      $('#votersList').html('<div class="empty-state">No voters registered yet. Add one above.</div>');
+      return;
+    }
+
+    $('#votersList').empty();
+    nonAdmin.forEach(function (v) {
+      var addrShort = v.eth_address
+        ? v.eth_address.slice(0, 6) + '…' + v.eth_address.slice(-4)
+        : '<no address>';
+      var initial = v.voter_id.charAt(0).toUpperCase();
+      var row =
+        '<div class="admin-candidate-row">' +
+          '<div class="row-avatar">' + initial + '</div>' +
+          '<div class="row-info">' +
+            '<div class="row-name">' + v.voter_id + '</div>' +
+            '<span class="row-party">' + addrShort + '</span>' +
+          '</div>' +
+          '<div class="row-votes">' +
+            '<button class="action-btn-sm danger" onclick="App.deleteVoter(\'' + v.voter_id + '\')">remove</button>' +
+          '</div>' +
+        '</div>';
+      $('#votersList').append(row);
+    });
+  },
+
+  registerVoter: function () {
+    var voter_id = $('#newVoterId').val().trim();
+    var password = $('#newVoterPw').val().trim();
+    var eth_address = $('#newVoterAddr').val().trim();
+    var msgEl = $('#voterRegMsg');
+
+    if (!voter_id || !password || !eth_address) {
+      msgEl.text('All three fields are required.').css('color', '#f85149');
+      return;
+    }
+    if (!/^0x[a-fA-F0-9]{40}$/.test(eth_address)) {
+      msgEl.text('Invalid Ethereum address.').css('color', '#f85149');
+      return;
+    }
+
+    fetch('/admin/voter', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + App.adminToken()
+      },
+      body: JSON.stringify({ voter_id: voter_id, password: password, eth_address: eth_address })
+    })
+    .then(function (r) {
+      return r.json().then(function (body) { return { ok: r.ok, body: body }; });
+    })
+    .then(function (res) {
+      if (!res.ok) {
+        msgEl.text(res.body.message || 'Failed to register voter').css('color', '#f85149');
+        return;
+      }
+      msgEl.text('Voter ' + voter_id + ' registered.').css('color', '#3fb950');
+      $('#newVoterId').val('');
+      $('#newVoterPw').val('');
+      $('#newVoterAddr').val('');
+      App.loadVoters();
+    })
+    .catch(function (err) {
+      msgEl.text('Error: ' + err.message).css('color', '#f85149');
+    });
+  },
+
+  deleteVoter: function (voter_id) {
+    if (!confirm('Delete voter "' + voter_id + '"? This cannot be undone.')) return;
+    fetch('/admin/voter/' + encodeURIComponent(voter_id), {
+      method: 'DELETE',
+      headers: { 'Authorization': 'Bearer ' + App.adminToken() }
+    })
+    .then(function () { App.loadVoters(); });
+  },
+
   // ── Voter ─────────────────────────────────────────────────────────────────
 
   initVoter: function () {
@@ -172,23 +296,21 @@ window.App = {
       }
 
       Promise.all(promises).then(function (elections) {
-        var tabsHtml = '<div class="election-tabs">';
-        elections.forEach(function (e) {
-          var id   = parseInt(e[0]);
-          var name = e[1];
-          tabsHtml += '<button class="election-tab" data-id="' + id + '" onclick="App.selectElection(' + id + ', \'' + mode + '\')">' + name + '</button>';
-        });
-        tabsHtml += '</div>';
-
-        if (mode === 'admin') {
-          $('#electionTabs').html(tabsHtml);
+        if (mode === 'voter') {
+          // Filter to elections this voter is eligible for.
+          var eligibilityChecks = elections.map(function (e) {
+            return App.instance.isEligible(parseInt(e[0]), App.account);
+          });
+          Promise.all(eligibilityChecks).then(function (eligibilityResults) {
+            var visible = elections.filter(function (_, idx) { return eligibilityResults[idx]; });
+            if (visible.length === 0) {
+              $('#electionTabsWrapper').html('<div class="empty-state">You are not yet eligible for any election. Wait for the administrator to whitelist your address.</div>');
+              return;
+            }
+            App._renderElectionTabs(visible, 'voter');
+          });
         } else {
-          $('#electionTabsWrapper').html(tabsHtml);
-        }
-
-        // Auto-select the first election
-        if (elections.length > 0) {
-          App.selectElection(parseInt(elections[0][0]), mode);
+          App._renderElectionTabs(elections, 'admin');
         }
       }).catch(function (err) {
         console.error('loadElectionTabs error:', err.message);
@@ -196,10 +318,29 @@ window.App = {
     });
   },
 
+  _renderElectionTabs: function (elections, mode) {
+    var tabsHtml = '<div class="election-tabs">';
+    elections.forEach(function (e) {
+      var id   = parseInt(e[0]);
+      var name = e[1];
+      tabsHtml += '<button class="election-tab" data-id="' + id + '" onclick="App.selectElection(' + id + ', \'' + mode + '\')">' + name + '</button>';
+    });
+    tabsHtml += '</div>';
+
+    if (mode === 'admin') {
+      $('#electionTabs').html(tabsHtml);
+    } else {
+      $('#electionTabsWrapper').html(tabsHtml);
+    }
+
+    if (elections.length > 0) {
+      App.selectElection(parseInt(elections[0][0]), mode);
+    }
+  },
+
   selectElection: function (electionId, mode) {
     App.selectedElectionId = electionId;
 
-    // Highlight active tab
     $('.election-tab').removeClass('active');
     $('.election-tab[data-id="' + electionId + '"]').addClass('active');
 
@@ -212,6 +353,7 @@ window.App = {
         $('#managingElectionName').text(name);
         $('#electionManagement').show();
         App.loadCandidates(App.instance, electionId);
+        App.loadEligibility(electionId);
       } else {
         $('#electionTitle').text(name);
 
@@ -233,19 +375,76 @@ window.App = {
 
         App.loadCandidates(App.instance, electionId);
 
-        // Check if voter already voted in this election
         App.instance.checkVote(electionId).then(function (voted) {
           if (voted) {
             $('#voteButton').attr('disabled', true);
             $('#msg').text('You have already cast your vote in this election. Thank you!').css('color', '#3fb950');
           } else {
-            // Enable only after a candidate is selected
             $('#voteButton').attr('disabled', true);
           }
         });
       }
     }).catch(function (err) {
       console.error('selectElection error:', err.message);
+    });
+  },
+
+  // ── Eligibility (admin) ──────────────────────────────────────────────────
+
+  loadEligibility: function (electionId) {
+    if (!App.voters || App.voters.length === 0) {
+      $('#eligibilityList').html('<div class="empty-state">No voters registered yet. Add voters first.</div>');
+      $('#eligibilityCount').text('0 eligible');
+      return;
+    }
+
+    var nonAdmin = App.voters.filter(function (v) { return v.role !== 'admin' && v.eth_address; });
+    if (nonAdmin.length === 0) {
+      $('#eligibilityList').html('<div class="empty-state">No voters with bound addresses to whitelist.</div>');
+      $('#eligibilityCount').text('0 eligible');
+      return;
+    }
+
+    var checks = nonAdmin.map(function (v) {
+      return App.instance.isEligible(electionId, v.eth_address);
+    });
+
+    Promise.all(checks).then(function (results) {
+      var eligibleN = results.filter(Boolean).length;
+      $('#eligibilityCount').text(eligibleN + ' / ' + nonAdmin.length + ' eligible');
+
+      $('#eligibilityList').empty();
+      nonAdmin.forEach(function (v, idx) {
+        var isElig = results[idx];
+        var addrShort = v.eth_address.slice(0, 6) + '…' + v.eth_address.slice(-4);
+        var initial = v.voter_id.charAt(0).toUpperCase();
+        var actionHtml = isElig
+          ? '<span class="status-pill ok">eligible</span>'
+          : '<button class="action-btn-sm" onclick="App.makeEligible(' + electionId + ', \'' + v.eth_address + '\', this)">whitelist</button>';
+        var row =
+          '<div class="admin-candidate-row">' +
+            '<div class="row-avatar">' + initial + '</div>' +
+            '<div class="row-info">' +
+              '<div class="row-name">' + v.voter_id + '</div>' +
+              '<span class="row-party">' + addrShort + '</span>' +
+            '</div>' +
+            '<div class="row-votes">' + actionHtml + '</div>' +
+          '</div>';
+        $('#eligibilityList').append(row);
+      });
+    }).catch(function (err) {
+      console.error('loadEligibility error:', err);
+    });
+  },
+
+  makeEligible: function (electionId, address, btn) {
+    $(btn).prop('disabled', true).text('signing...');
+    App.instance.addEligibleVoter(electionId, address).then(function () {
+      App.loadEligibility(electionId);
+    }).catch(function (err) {
+      console.error('makeEligible error:', err);
+      alert('Error: ' + err.message);
+      $(btn).prop('disabled', false).text('whitelist');
     });
   },
 
@@ -321,7 +520,6 @@ window.App = {
   },
 
   selectCandidate: function (el, id) {
-    // Don't allow selection if already voted
     if ($('#voteButton').attr('disabled') && $('#msg').css('color') === 'rgb(63, 185, 80)') return;
     $('.candidate-card').removeClass('selected');
     $('input[name="candidate"]').prop('checked', false);
