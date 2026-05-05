@@ -1,17 +1,22 @@
 const express = require('express');
 const path = require('path');
-const jwt = require('jsonwebtoken');
 
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 require('./db/seed');
 
 const authRouter = require('./routes/auth');
-const authorizeUser = require('./middleware/auth');
+const adminRouter = require('./routes/admin');
+const { authorizeUser } = require('./middleware/auth');
 
 const app = express();
 
-// Auth endpoint
+app.use(express.json());
+
+// Public auth endpoint
 app.use(authRouter);
+
+// Admin API
+app.use('/admin', adminRouter);
 
 // Static assets
 app.get('/css/:file', (req, res) => {
@@ -48,6 +53,7 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'frontend', 'html', 'login.html'));
 });
 
-app.listen(8080, () => {
-  console.log('Server listening on http://localhost:8080');
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, () => {
+  console.log('Server listening on http://localhost:' + PORT);
 });
