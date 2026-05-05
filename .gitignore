@@ -1,5 +1,4 @@
 node_modules
-blockchain/build
 frontend/dist
 backend/voters.db
 package-lock.json
