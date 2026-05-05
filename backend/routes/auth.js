@@ -11,7 +11,7 @@ router.get('/login', (req, res) => {
   }
 
   const voter = db
-    .prepare('SELECT role FROM voters WHERE voter_id = ? AND password = ?')
+    .prepare('SELECT role, eth_address FROM voters WHERE voter_id = ? AND password = ?')
     .get(voter_id, password);
 
   if (!voter) {
@@ -19,12 +19,16 @@ router.get('/login', (req, res) => {
   }
 
   const token = jwt.sign(
-    { voter_id, role: voter.role },
+    { voter_id, role: voter.role, eth_address: voter.eth_address },
     process.env.SECRET_KEY,
     { algorithm: 'HS256' }
   );
 
-  return res.json({ token, role: voter.role });
+  return res.json({
+    token,
+    role: voter.role,
+    eth_address: voter.eth_address,
+  });
 });
 
 module.exports = router;
