@@ -1,19 +1,22 @@
-# BlockVote — Complete Code Explanation
+# BlockVote — File-by-File Code Explanation
 
-Every file, every function, explained in plain terms.
+Every file in the project, every function, what it does and why. Pair with [architecture.md](architecture.md) for the diagrams and [project-explained.md](project-explained.md) for the narrative.
 
 ---
 
-## Table of Contents
+## Contents
 
-1. [Smart Contract — `blockchain/contracts/Voting.sol`](#1-smart-contract)
-2. [Backend Server — `backend/server.js`](#2-backend-server)
-3. [Auth Route — `backend/routes/auth.js`](#3-auth-route)
-4. [JWT Middleware — `backend/middleware/auth.js`](#4-jwt-middleware)
-5. [Database Setup — `backend/db/database.js`](#5-database-setup)
-6. [Database Seed — `backend/db/seed.js`](#6-database-seed)
-7. [Login Script — `frontend/js/login.js`](#7-login-script)
-8. [App Script — `frontend/js/app.js`](#8-app-script)
+1. [Smart contract — `blockchain/contracts/Voting.sol`](#1-smart-contract)
+2. [Truffle config — `blockchain/truffle-config.js`](#2-truffle-config)
+3. [Express server — `backend/server.js`](#3-express-server)
+4. [Auth route — `backend/routes/auth.js`](#4-auth-route)
+5. [Admin API route — `backend/routes/admin.js`](#5-admin-api-route)
+6. [Auth middleware — `backend/middleware/auth.js`](#6-auth-middleware)
+7. [Database setup — `backend/db/database.js`](#7-database-setup)
+8. [Database seed — `backend/db/seed.js`](#8-database-seed)
+9. [Login script — `frontend/js/login.js`](#9-login-script)
+10. [App script — `frontend/js/app.js`](#10-app-script)
+11. [Dockerfiles](#11-dockerfiles)
 
 ---
 
@@ -21,605 +24,390 @@ Every file, every function, explained in plain terms.
 
 **File:** `blockchain/contracts/Voting.sol`
 
-This is the heart of the system. Once deployed to the blockchain, its data is permanent and tamper-proof. No one — not even the developer — can alter recorded votes. The contract now supports multiple independent elections, each with their own candidates, voting period, and voter registry.
+The on-chain source of truth. Once deployed, no one — not even the deployer — can rewrite a recorded vote. The contract owns the rules; the application is just a thin client to it.
 
 ### Structs
 
 ```solidity
-struct Candidate {
-    uint id;
-    string name;
-    string party;
-    uint voteCount;
+struct Candidate { uint id; string name; string party; uint voteCount; }
+struct Election  { uint id; string name; uint256 startDate; uint256 endDate; uint countCandidates; }
+```
+
+`startDate` / `endDate` are Unix timestamps in seconds. `countCandidates` doubles as the running count and the next-id-to-assign.
+
+### State variables
+
+```solidity
+address public owner;
+uint    public countElections;
+mapping(uint => Election)                          public elections;
+mapping(uint => mapping(uint => Candidate))        public candidates;
+mapping(uint => mapping(address => bool))          public voters;
+mapping(uint => mapping(address => bool))          public eligibleVoters;
+mapping(uint => uint)                              public eligibleVoterCount;
+```
+
+- `owner` — set in the constructor to whoever deployed the contract. The single privileged address.
+- `elections[id]` — election metadata.
+- `candidates[electionId][candidateId]` — candidates are scoped per election.
+- `voters[electionId][address]` — has this address voted in this election? One vote per address per election.
+- `eligibleVoters[electionId][address]` — is this address whitelisted to vote in this election? Set by `addEligibleVoter`.
+- `eligibleVoterCount[electionId]` — count of whitelisted addresses, for UI display.
+
+### Constructor + modifier
+
+```solidity
+constructor() public { owner = msg.sender; }
+
+modifier onlyOwner() {
+    require(msg.sender == owner, "Only the contract owner");
+    _;
 }
 ```
-A blueprint for a candidate record — bundles the four fields together so they can be stored as one unit.
 
-```solidity
-struct Election {
-    uint id;
-    string name;
-    uint256 startDate;
-    uint256 endDate;
-    uint countCandidates;
-}
-```
-A blueprint for an election record. `startDate` and `endDate` are Unix timestamps (seconds since 1970). `countCandidates` acts as both a running count and the next candidate ID.
+The deployer becomes owner. Every mutating admin function carries `onlyOwner`, so even if the JWT auth was somehow bypassed, the contract still refuses calls from any other address.
 
----
+### `createElection(string _name) onlyOwner returns (uint)`
 
-### State Variables
+Validates the name is non-empty, increments `countElections`, stores a new `Election` struct with zero dates and zero candidates. Returns the new ID.
 
-```solidity
-uint public countElections;
-```
-Running total of created elections. Starts at 0. Incremented each time `createElection` is called.
+### `setDates(uint _electionId, uint256 _start, uint256 _end) onlyOwner`
 
-```solidity
-mapping(uint => Election) public elections;
-```
-A dictionary: election ID → Election struct. Solidity's `mapping` is like a hash map. `public` lets anyone read any entry directly.
+Validates election exists and `_end > _start`. Assigns the timestamps.
 
-```solidity
-mapping(uint => mapping(uint => Candidate)) public candidates;
-```
-A nested mapping: `candidates[electionId][candidateId]` → Candidate struct. Each election has its own independent candidate list.
+### `addCandidate(uint _electionId, string _name, string _party) onlyOwner returns (uint)`
 
-```solidity
-mapping(uint => mapping(address => bool)) public voters;
-```
-A nested mapping: `voters[electionId][walletAddress]` → bool. Tracks who has voted in which election. One vote per address per election — completely independent across elections.
+Increments the election's candidate count, stores the candidate struct keyed on the new ID, returns the new ID.
 
----
+### `addEligibleVoter(uint _electionId, address _voter) onlyOwner`
 
-### `createElection(string memory _name) → uint`
+Validates election exists. Rejects if already eligible (avoids duplicate count increments). Sets the mapping, increments the count.
 
-**What it does:** Creates a new named election on-chain and returns its ID.
+### `vote(uint _electionId, uint _candidateId)` — the only mutating function callable by non-owners
 
-**How it works:**
-1. `require(bytes(_name).length > 0)` — rejects empty names.
-2. Increments `countElections` — so IDs start at 1, never 0.
-3. Stores a new `Election` struct with `startDate`, `endDate`, and `countCandidates` all initialised to 0.
-4. Returns the new election's ID.
+Six guards (in order):
 
-**Who calls it:** Admin, via MetaMask on the admin dashboard.
+1. Election ID is in range
+2. `eligibleVoters[_electionId][msg.sender]` is true ⇒ "Not eligible to vote in this election"
+3. `e.startDate > 0` ⇒ "Voting period not set"
+4. `now >= e.startDate && now < e.endDate` ⇒ "Not within voting period"
+5. Candidate ID is in range
+6. `!voters[_electionId][msg.sender]` ⇒ "Already voted in this election"
+
+If all pass: mark voter as voted, increment chosen candidate's count.
+
+### View functions (free, no gas, no on-chain mutation)
+
+- `getCountElections()` → total elections
+- `getElection(id)` → `(id, name, startDate, endDate, countCandidates)`
+- `getDates(electionId)` → `(startDate, endDate)`
+- `getCountCandidates(electionId)` → number of candidates in this election
+- `getCandidate(electionId, candidateId)` → `(id, name, party, voteCount)`
+- `isEligible(electionId, address)` → bool
+- `getEligibleVoterCount(electionId)` → number whitelisted
+- `checkVote(electionId)` → bool, has `msg.sender` voted in this election
 
 ---
 
-### `getCountElections() → uint`
+## 2. Truffle Config
 
-**What it does:** Returns how many elections exist on-chain.
+**File:** `blockchain/truffle-config.js`
 
-**Used by:** `app.js` on both pages to know how many tabs to render in the election tab strip.
+Defines two networks:
 
----
+- **`development`** — `127.0.0.1:8545`, accepts any chain ID. Used by `truffle migrate` against local Ganache.
+- **`production`** — uses `@truffle/hdwallet-provider` with `MNEMONIC` and `PRODUCTION_RPC_URL` from `.env`. Used by `truffle migrate --network production` to deploy to a remote chain (Railway-hosted Ganache).
 
-### `getElection(uint _electionId) → (uint, string, uint256, uint256, uint)`
-
-**What it does:** Returns all five fields of an election — `(id, name, startDate, endDate, countCandidates)`.
-
-**How it works:** Reads `elections[_electionId]` from storage and returns its fields as a tuple.
-
-**Used by:** `app.js` when a tab is clicked — fetches the election name and dates to display, and the candidate count to know how many `getCandidate` calls to make.
+The HDWalletProvider is wrapped in a try/import so the file works even when the package isn't installed (local-only flows don't need it).
 
 ---
 
-### `setDates(uint _electionId, uint256 _start, uint256 _end)`
-
-**What it does:** Sets the voting window for a specific election. Can be called multiple times (admins can adjust dates as needed).
-
-**How it works:**
-- `require(_electionId > 0 && _electionId <= countElections)` — ensures the election exists.
-- `require(_end > _start)` — end must come after start.
-- Assigns `startDate` and `endDate` on the election struct.
-
-**Who calls it:** Admin, after selecting an election tab on the admin page.
-
----
-
-### `getDates(uint _electionId) → (uint256, uint256)`
-
-**What it does:** Returns the `(startDate, endDate)` pair for an election.
-
-**Used by:** `app.js` to display the voting period badge on the voter page.
-
----
-
-### `addCandidate(uint _electionId, string memory _name, string memory _party) → uint`
-
-**What it does:** Registers a new candidate under a specific election.
-
-**How it works:**
-1. Validates the election ID.
-2. Increments `elections[_electionId].countCandidates` — the new candidate's ID.
-3. Stores the `Candidate` struct in `candidates[_electionId][newId]`.
-4. Returns the new candidate ID.
-
-**Who calls it:** Admin, after selecting an election tab on the admin page.
-
----
-
-### `getCountCandidates(uint _electionId) → uint`
-
-**What it does:** Returns the number of candidates registered in a specific election.
-
-**Used by:** `app.js` to know how many `getCandidate()` calls to fire in parallel.
-
----
-
-### `getCandidate(uint _electionId, uint _candidateId) → (uint, string, string, uint)`
-
-**What it does:** Returns all four fields for a candidate in a given election — `(id, name, party, voteCount)`.
-
-**Used by:** `app.js` in a `Promise.all` parallel fetch — gets all candidates at once before rendering the candidate cards.
-
----
-
-### `vote(uint _electionId, uint _candidateId)`
-
-**What it does:** Records a vote for a candidate in a specific election. The core on-chain action.
-
-**How it works — five `require` guards (any failure reverts and costs no net ETH):**
-
-1. `require(_electionId > 0 && _electionId <= countElections)` — election must exist.
-2. `require(e.startDate > 0)` — voting period must have been set by the admin.
-3. `require(now >= e.startDate && now < e.endDate)` — must be within the open voting window. `now` is Solidity's alias for `block.timestamp`.
-4. `require(_candidateId > 0 && _candidateId <= e.countCandidates)` — candidate must exist in this election.
-5. `require(!voters[_electionId][msg.sender])` — this wallet must not have already voted in this election. `msg.sender` is the Ethereum address that signed the transaction (the MetaMask wallet).
-
-**After all checks pass:**
-- `voters[_electionId][msg.sender] = true` — marks this address as voted in this election.
-- `candidates[_electionId][_candidateId].voteCount++` — increments the chosen candidate's count.
-
-**Key property:** Stored permanently on-chain. Immutable once mined. A voter can vote in multiple elections but only once per election.
-
----
-
-### `checkVote(uint _electionId) → bool`
-
-**What it does:** Returns `true` if the calling address has already voted in the given election.
-
-**How it works:** Reads `voters[_electionId][msg.sender]`.
-
-**`view` keyword:** Read-only — costs no gas.
-
-**Used by:** `app.js` after an election tab is selected, to decide whether to show "already voted" or enable the vote button.
-
----
-
-## 2. Backend Server
+## 3. Express Server
 
 **File:** `backend/server.js`
 
-The single Node.js process that serves the entire web app. Uses Express.js.
+The single Node process. Sequence on startup:
 
-### Setup
+1. `dotenv.config({ path: ../.env })` — loads `SECRET_KEY` and (locally) `MNEMONIC` / `PRODUCTION_RPC_URL`.
+2. `require('./db/seed')` — runs the seed module synchronously, inserting the admin row if not already present.
+3. `app.use(express.json())` — parses JSON bodies for POST endpoints.
+4. `app.use(authRouter)` — mounts the public `/login` route.
+5. `app.use('/admin', adminRouter)` — mounts the admin API under `/admin/*`.
+6. Static asset routes for `/css`, `/js`, `/dist`, `/assets`, `/favicon.ico`.
+7. JWT-protected pages for `/index.html` and `/admin.html`.
+8. Public root `/` serves `login.html`.
+9. `app.listen(process.env.PORT || 8080)`.
 
-```js
-require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
-```
-Loads environment variables from `.env` at the project root. `SECRET_KEY` loaded here is used by the JWT middleware.
-
-```js
-const authRouter    = require('./routes/auth');
-const authorizeUser = require('./middleware/auth');
-```
-Imports the login route handler and JWT middleware.
-
-### `app.use(authRouter)`
-
-Mounts the auth router globally. When a request comes in for `GET /login`, Express routes it to `routes/auth.js` before anything else.
-
-### Static asset routes (`/css/:file`, `/js/:file`, `/dist/:file`)
-
-Each uses `req.params.file` to serve the matching file from `frontend/`. No auth check — CSS and JS must be publicly accessible so the login page itself can load.
-
-### `app.get('/index.html', authorizeUser, ...)`
-
-`authorizeUser` runs first. If the JWT check fails the response ends with 401. Only with a valid token does Express call `res.sendFile(...)`. Same pattern applies to `/admin.html`.
-
-### `app.get('/')`
-
-Serves `frontend/html/login.html` with no auth check — the public entry point.
-
-### `app.listen(8080)`
-
-Binds the server to port 8080.
+The `PORT` env var is what Railway sets; locally it defaults to 8080.
 
 ---
 
-## 3. Auth Route
+## 4. Auth Route
 
 **File:** `backend/routes/auth.js`
 
-Handles the single login endpoint.
+Single endpoint: `GET /login?voter_id=&password=`.
 
-### `GET /login?voter_id=&password=`
+Steps:
 
-**Step 1 — Input validation:**
-```js
-if (!voter_id || !password) {
-    return res.status(400).json({ message: 'voter_id and password are required' });
-}
-```
-Returns 400 Bad Request if either field is missing.
+1. Validate both query params are present (else 400).
+2. `SELECT role, eth_address FROM voters WHERE voter_id = ? AND password = ?` — parameterized to prevent SQL injection.
+3. If no row, 401 "Invalid Voter ID or password" (deliberately ambiguous about which field was wrong).
+4. `jwt.sign({ voter_id, role, eth_address }, SECRET_KEY, { algorithm: 'HS256' })`.
+5. Respond `{ token, role, eth_address }`.
 
-**Step 2 — Database lookup:**
-```js
-const voter = db
-  .prepare('SELECT role FROM voters WHERE voter_id = ? AND password = ?')
-  .get(voter_id, password);
-```
-- `.prepare()` compiles the SQL once.
-- `.get()` returns the first matching row, or `undefined`.
-- `?` placeholders are parameterised — values are never interpolated into the SQL string, preventing SQL injection.
-
-**Step 3 — Not found:**
-```js
-if (!voter) return res.status(401).json({ message: 'Invalid Voter ID or password' });
-```
-Deliberately vague — doesn't reveal whether the ID or password was wrong.
-
-**Step 4 — Sign JWT:**
-```js
-const token = jwt.sign(
-    { voter_id, role: voter.role },
-    process.env.SECRET_KEY,
-    { algorithm: 'HS256' }
-);
-```
-Creates a signed JSON Web Token containing `voter_id` and `role`. Signed with HMAC-SHA256. Anyone can read the payload, but cannot forge one without `SECRET_KEY`.
-
-**Step 5 — Respond:**
-```js
-return res.json({ token, role: voter.role });
-```
-The frontend uses `role` to redirect to the right page, and stores `token` in sessionStorage.
+The frontend uses `role` to decide where to redirect, and stores `token` plus `eth_address` in localStorage.
 
 ---
 
-## 4. JWT Middleware
+## 5. Admin API Route
+
+**File:** `backend/routes/admin.js`
+
+Mounted at `/admin/*`. Every request goes through `authorizeApi` then `requireAdmin`.
+
+### `GET /admin/voters`
+
+Returns the full voter list ordered by role descending, then voter_id ascending. Includes admin (the frontend filters it out for display).
+
+### `POST /admin/voter`
+
+Body: `{ voter_id, password, eth_address }`.
+
+1. Validates all three are present.
+2. Validates the address with `/^0x[a-fA-F0-9]{40}$/`.
+3. `INSERT INTO voters (voter_id, password, role, eth_address) VALUES (?, ?, 'user', ?)`.
+4. On `SQLITE_CONSTRAINT_PRIMARYKEY`, returns 409 "Voter ID already exists".
+5. On success, returns 201 with the new voter.
+
+### `DELETE /admin/voter/:voter_id`
+
+Refuses to delete `admin`. Otherwise `DELETE FROM voters WHERE voter_id = ?`.
+
+---
+
+## 6. Auth Middleware
 
 **File:** `backend/middleware/auth.js`
 
-Runs before protected route handlers to verify the caller is authenticated.
+Two helpers and three exported middlewares:
 
-### `authorizeUser(req, res, next)`
+- `getToken(req)` — checks `?Authorization=Bearer X` first, then the `Authorization` header.
+- `verifyToken(token)` — `jwt.verify` with HS256 and `SECRET_KEY`.
 
-Express middleware receives three arguments: the request, response, and `next` (passes control to the next handler).
+### `authorizeUser` (default export, also named)
 
-**Step 1 — Extract token:**
-```js
-const token = req.query.Authorization?.split('Bearer ')[1];
-```
-Reads the `Authorization` query parameter. `?.` is optional chaining — safe if the param is absent. Strips the `Bearer ` prefix to get the raw token.
+For HTML page loads. On missing token, returns a tiny HTML "Login to Continue" page — friendlier than JSON if the user navigated directly. On verify failure, returns JSON.
 
-**Step 2 — Missing token:**
-```js
-if (!token) return res.status(401).send('<h1 align="center"> Login to Continue </h1>');
-```
-Serves a plain HTML message if the user navigated directly without logging in.
+### `authorizeApi`
 
-**Step 3 — Verify:**
-```js
-const decodedToken = jwt.verify(token, process.env.SECRET_KEY, { algorithms: ['HS256'] });
-req.user = decodedToken;
-next();
-```
-`jwt.verify` checks signature and expiry. Decoded payload (`{ voter_id, role, iat }`) is attached to `req.user`. `next()` passes control to the route's `sendFile` call.
+For JSON API endpoints. Always returns JSON on failure. Used by the admin router.
 
-**Step 4 — Invalid token:**
-```js
-} catch (error) {
-    return res.status(401).json({ message: 'Invalid authorization token' });
-}
-```
-`jwt.verify` throws for malformed, bad-signature, or expired tokens.
+### `requireAdmin`
+
+Runs *after* `authorizeApi`. Checks `req.user.role === 'admin'`, else 403.
 
 ---
 
-## 5. Database Setup
+## 7. Database Setup
 
 **File:** `backend/db/database.js`
 
-Creates and exports the SQLite connection. Required by both `routes/auth.js` and `seed.js`.
+Opens (or creates) `backend/voters.db` with `better-sqlite3`. Runs `CREATE TABLE IF NOT EXISTS voters` on every load — idempotent.
 
-```js
-const db = new Database(path.join(__dirname, '..', 'voters.db'));
-```
-Opens (or creates) `backend/voters.db`. `better-sqlite3` is synchronous — no callbacks.
+Schema:
 
-```js
-db.exec(`
-  CREATE TABLE IF NOT EXISTS voters (
-    voter_id TEXT PRIMARY KEY,
-    password TEXT NOT NULL,
-    role     TEXT NOT NULL CHECK(role IN ('admin', 'user'))
-  )
-`);
+```sql
+CREATE TABLE voters (
+    voter_id    TEXT PRIMARY KEY,
+    password    TEXT NOT NULL,
+    role        TEXT NOT NULL CHECK(role IN ('admin', 'user')),
+    eth_address TEXT
+);
 ```
-- `CREATE TABLE IF NOT EXISTS` — safe to run on every module load.
-- `CHECK(role IN ('admin', 'user'))` — SQLite constraint rejecting any other role value.
 
-```js
-module.exports = db;
-```
-Node's `require()` cache means every file that imports this module gets the same connection instance.
+- `voter_id` is the natural primary key.
+- `role` is constrained to `'admin'` or `'user'` at the SQL level.
+- `eth_address` is nullable in the schema but required by the API for new voters.
+
+Exports the `db` instance — Node's require cache means every importer shares the same connection.
 
 ---
 
-## 6. Database Seed
+## 8. Database Seed
 
 **File:** `backend/db/seed.js`
 
-Run once via `npm run seed` to populate demo accounts.
+Run on every server startup (called from `server.js`). Inserts only the admin row, bound to the deterministic Ganache deployer address `0x90F8bf6A479f320ead074411a4B0e7944Ea8c9C1`. Uses `INSERT OR IGNORE` so it's safe to run multiple times.
 
-### Voter list
-
-11 hardcoded records — one admin (`admin` / `admin123`) and ten voters (`voter1`–`voter10` / `pass1`–`pass10`).
-
-### `INSERT OR IGNORE`
-
-Silently skips rows whose `voter_id` already exists. Safe to run multiple times.
-
-### `db.transaction()`
-
-```js
-const seedAll = db.transaction(() => {
-    for (const v of voters) insert.run(v.voter_id, v.password, v.role);
-});
-seedAll();
-```
-Wraps all 11 inserts in one SQLite transaction — commits to disk once, not eleven times. All-or-nothing: if any insert fails, none are committed.
+All other voters are added at runtime via the admin UI.
 
 ---
 
-## 7. Login Script
+## 9. Login Script
 
 **File:** `frontend/js/login.js`
 
-Runs in the browser. Handles form submission on the login page.
+Vanilla JS, runs as a Browserified bundle on `login.html`.
 
-### Form submit listener
+On form submit:
 
-Attached with `preventDefault()` to stop the browser's default POST navigation.
-
-### Input validation
-
-Trims both inputs and shows an error if either is empty — before making any network request.
-
-### Spinner UI
-
-Hides the submit button and shows a spinner while the fetch is in flight. Gives immediate visual feedback.
-
-### `fetch('/login?voter_id=...&password=...')`
-
-Same-origin `GET` request to the Express server — no CORS issue. `encodeURIComponent()` applied to both values so special characters don't break the URL.
-
-### Response handling
-
-- **200 OK** → parse JSON, read `data.role`.
-  - `admin` → redirect to `/admin.html?Authorization=Bearer <token>`
-  - `user` → redirect to `/index.html?Authorization=Bearer <token>`
-- **Non-OK** → show the error message from the server.
-
-### Error handling
-
-`.catch()` catches network failures, shows the message, and re-enables the submit button.
+1. `preventDefault()` — stop the browser's default POST navigation.
+2. Trim both inputs, show error if either is empty.
+3. Hide button text, show spinner.
+4. `fetch('/login?voter_id=...&password=...')`.
+5. On non-OK response: re-show button, set error text.
+6. On success: store the bound address (`localStorage.setItem('bvBoundAddress', data.eth_address)`), store the JWT under `jwtTokenAdmin` or `jwtTokenVoter` based on role, redirect to the appropriate page with `?Authorization=Bearer <token>` in the URL.
 
 ---
 
-## 8. App Script
+## 10. App Script
 
 **File:** `frontend/js/app.js`
 
-Runs in the browser as a Browserified bundle. Handles all blockchain interaction for both voter and admin pages. The same script powers both — it detects which page it is on via `document.title`.
-
-### Module imports
-
-```js
-const Web3 = require('web3');
-const contract = require('@truffle/contract');
-const votingArtifacts = require('../../blockchain/build/contracts/Voting.json');
-var VotingContract = contract(votingArtifacts);
-```
-- `Web3` — the Ethereum JS library.
-- `@truffle/contract` — wraps the raw ABI into a promise-based interface.
-- `votingArtifacts` — compiled contract JSON with ABI and deployed address.
-- `VotingContract` — the contract abstraction, not yet connected to a provider.
+The biggest file. Browserified bundle that powers both `index.html` (voter) and `admin.html` (admin). Detects which page it's on via `document.title.includes('Admin')`.
 
 ### Module-level state
 
 ```js
 window.App = {
-  instance: null,          // the connected contract instance
-  selectedElectionId: null // which election tab is active
-}
+  instance: null,           // the connected Voting contract
+  selectedElectionId: null, // active tab
+  account: null,            // current MetaMask address
+  boundAddress: null,       // address registered for this login
+  voters: []                // admin: cached list of voters
+};
 ```
-Both are set during the session and read by every function that interacts with the contract.
 
----
+### `App.eventStart()` — entry, async
 
-### `App.eventStart()` — async
-
-Entry point, called once on `window.load`.
-
-```js
-await window.ethereum.request({ method: 'eth_requestAccounts' });
-```
-Triggers the MetaMask popup to connect the wallet. `await` ensures the address is available before proceeding.
-
-```js
-VotingContract.setProvider(window.ethereum);
-VotingContract.defaults({ from: window.ethereum.selectedAddress, gas: 6654755 });
-```
-Wires up MetaMask as the Web3 provider. `defaults` pre-fills `from` and gas limit on every transaction.
-
-**Contract connection (with fallback):**
-```js
-try {
-    App.instance = await VotingContract.deployed();
-} catch (err) {
-    // Fallback: use the address directly from the build artifacts
-    var latestAddress = networks[networkKeys[networkKeys.length - 1]].address;
-    App.instance = await VotingContract.at(latestAddress);
-}
-```
-`deployed()` requires the network ID in MetaMask to match the one in the build artifacts. If there's a mismatch (common in Codespaces), the fallback reads the contract address directly from the JSON and connects with `at()`.
-
-After connecting, calls either `App.initAdmin()` or `App.initVoter()` based on the page title.
-
----
+1. Confirms `window.ethereum` exists (MetaMask installed).
+2. Requests account access (triggers MetaMask popup).
+3. Wires up Web3 + the contract abstraction.
+4. Reads `App.boundAddress` from localStorage.
+5. Tries `VotingContract.deployed()`. On failure, falls back to `.at(latestKnownAddress)` from the build artifacts — handles network-id mismatches.
+6. **Address-binding gate**: if `boundAddress` is set and doesn't match `App.account`, renders an error and stops. No further contract calls are made.
+7. Branches to `initAdmin()` or `initVoter()`.
 
 ### `App.initAdmin()`
 
-Calls `App.loadElectionTabs('admin')` to render the tab strip, then registers click handlers for the three admin buttons:
+- `App.loadVoters()` — fetches and renders the voter registry list.
+- `App.loadElectionTabs('admin')` — renders the election tabs.
+- Wires up the four admin buttons:
+  - `#registerVoterBtn` → `App.registerVoter()`
+  - `#createElectionBtn` → `instance.createElection(name)` then refresh tabs
+  - `#addCandidate` → `instance.addCandidate(eId, name, party)` then refresh candidates
+  - `#addDate` → `instance.setDates(eId, start, end)`
 
-- **`#createElectionBtn`** — reads the election name input, calls `instance.createElection(name)`, then reloads the tab strip on success.
-- **`#addCandidate`** — validates that an election is selected and both fields are filled, calls `instance.addCandidate(selectedElectionId, name, party)`, then refreshes the candidate list.
-- **`#addDate`** — converts `YYYY-MM-DD` date strings to Unix seconds (`Date.parse() / 1000`), calls `instance.setDates(selectedElectionId, start, end)`.
+### `App.adminToken()`
 
----
+Returns `localStorage.getItem('jwtTokenAdmin')`. Used as the `Authorization` header on all admin API calls.
+
+### `App.loadVoters()`
+
+`fetch('/admin/voters', { headers: { Authorization: 'Bearer ' + token } })` → caches in `App.voters` → calls `App.renderVoters()` → if an election is selected, also re-runs `App.loadEligibility()` so eligibility status reflects the new voter list.
+
+### `App.renderVoters()`
+
+Filters out the admin row, renders each remaining voter as an `.admin-candidate-row` with avatar, voter_id, truncated address, and a `[ remove ]` button that calls `App.deleteVoter(id)`.
+
+### `App.registerVoter()`
+
+Reads the three input fields. Validates all present, validates address format. POSTs to `/admin/voter`. On success: clear inputs, show green status message, refresh voter list.
+
+### `App.deleteVoter(voter_id)`
+
+`confirm()` first, then `DELETE /admin/voter/:id`, then refresh.
 
 ### `App.initVoter()`
 
-Calls `App.loadElectionTabs('voter')` to render the election tabs on the voter page.
-
----
+Just `App.loadElectionTabs('voter')`.
 
 ### `App.loadElectionTabs(mode)`
 
-Fetches all elections from the chain and renders the tab strip.
+Reads `getCountElections()` then fans out parallel `getElection(i)` calls.
 
-**How it works:**
-1. Calls `instance.getCountElections()` to get the total.
-2. Fires `instance.getElection(i)` for every election ID in parallel via `Promise.all`.
-3. Builds a row of `<button class="election-tab">` elements, one per election.
-4. Auto-selects the first election by calling `App.selectElection(id, mode)`.
+For voter mode: also calls `isEligible(electionId, App.account)` for each election in parallel; renders only those returning true. If none, shows an empty state telling the voter they're not yet whitelisted anywhere.
 
-`mode` is either `'admin'` or `'voter'` — determines which DOM element the tabs are rendered into and which behaviour `selectElection` uses.
+For admin mode: renders all elections.
 
----
+Auto-selects the first visible election by calling `App.selectElection(id, mode)`.
+
+### `App._renderElectionTabs(elections, mode)`
+
+Internal helper. Builds the `<button class="election-tab">` strip and inserts it into `#electionTabs` (admin) or `#electionTabsWrapper` (voter).
 
 ### `App.selectElection(electionId, mode)`
 
-Called when a tab is clicked (or auto-selected on load).
+Marks the active tab. Reads the election from chain. For admin: sets the "Managing: name" header, shows the management panel, loads candidates and eligibility. For voter: sets the title, formats the date range, shows the voter view, loads candidates, runs `checkVote(electionId)` to detect repeat-vote attempts and lock the button.
 
-1. Sets `App.selectedElectionId = electionId`.
-2. Adds the `active` CSS class to the clicked tab, removes it from others.
-3. Calls `instance.getElection(electionId)` to fetch the election name and dates.
+### `App.loadEligibility(electionId)` — admin only
 
-**Admin path:**
-- Shows the "Managing: [name]" banner.
-- Reveals the `#electionManagement` panel.
-- Calls `App.loadCandidates()` for the admin candidate list.
+For each non-admin voter with an `eth_address`, fan out `isEligible(electionId, address)` calls in parallel. Render rows showing either an `eligible` pill or a `[ whitelist ]` button calling `App.makeEligible(...)`.
 
-**Voter path:**
-- Sets `#electionTitle` to the election name.
-- Formats and displays the voting period badge. If `startDate === 0`, shows "Voting period not set yet".
-- Shows the `#electionView` panel.
-- Resets the vote message and disables the vote button (re-enabled only after a candidate is selected).
-- Calls `App.loadCandidates()` for the voter candidate cards.
-- Calls `instance.checkVote(electionId)` — if already voted, disables the button and shows the "already voted" message.
+### `App.makeEligible(electionId, address, btn)` — admin only
 
----
+Disables the button, calls `instance.addEligibleVoter(electionId, address)`. On confirm, refreshes the eligibility list. On error, shows it and re-enables the button.
 
 ### `App.loadCandidates(instance, electionId)`
 
-Fetches and renders all candidates for a given election.
-
-**Step 1 — count:**
-```js
-instance.getCountCandidates(electionId).then(function(countRaw) {
-```
-Gets how many candidates exist. Shows empty state if 0.
-
-**Step 2 — parallel fetch:**
-```js
-var promises = [];
-for (var i = 1; i <= count; i++) promises.push(instance.getCandidate(electionId, i));
-Promise.all(promises).then(function(candidates) {
-```
-Fires all `getCandidate(electionId, id)` calls simultaneously. For N candidates this is N× faster than sequential awaits.
-
-**Step 3 — vote percentage:**
-```js
-var totalVotes = candidates.reduce((sum, c) => sum + parseInt(c[3]), 0);
-var percent = totalVotes > 0 ? Math.round((voteCount / totalVotes) * 100) : 0;
-```
-Computes each candidate's share of votes so far.
-
-**Step 4 — page detection:**
-```js
-var isAdminPage = document.title.includes('Admin');
-```
-- **Admin:** Renders compact rows — name, party badge, vote count.
-- **Voter:** Renders interactive cards — avatar, name, party badge, progress bar, radio input.
-
-**Step 5 — progress bar animation:**
-```js
-setTimeout(function() {
-    $('.vote-bar-fill').each(function() { $(this).css('width', $(this).data('width')); });
-}, 100);
-```
-Sets initial bar width to `0%` in HTML, then triggers CSS transitions after 100ms for a smooth fill-in effect.
-
----
+Reads `getCountCandidates(electionId)`, fans out `getCandidate(electionId, i)` calls in parallel. For admin: renders compact rows with vote counts. For voter: renders interactive cards (`onclick="App.selectCandidate(...)"`).
 
 ### `App.selectCandidate(el, id)`
 
-Called by `onclick` on each candidate card.
-
-1. Removes `selected` from all cards.
-2. Unchecks all radio inputs.
-3. Adds `selected` to the clicked card.
-4. Checks the hidden radio input (`#c<id>`).
-5. Enables the vote button (voter hasn't voted yet — this state is confirmed by `checkVote`).
-
----
+Marks the clicked card as selected, checks the underlying radio input, enables the vote button.
 
 ### `App.vote()`
 
-Called when "Cast Vote on Blockchain" is clicked.
+Validates an election and a candidate are selected. Disables the button, shows "Waiting for blockchain confirmation". Calls `instance.vote(electionId, candidateId)`. On confirm: green message, page reloads in 2s. On revert: shows the contract's revert reason (e.g. "Not within voting period").
 
-**Step 1 — guard checks:**
+### Bottom of file
+
 ```js
-if (!App.selectedElectionId) { ... show error ... return; }
-var candidateID = $("input[name='candidate']:checked").val();
-if (!candidateID) { ... show error ... return; }
+window.addEventListener('load', function () {
+  window.eth = new Web3(window.ethereum || new Web3.providers.HttpProvider('http://127.0.0.1:8545'));
+  window.App.eventStart();
+});
 ```
-Verifies both an election and a candidate have been selected.
 
-**Step 2 — UI feedback:**
-Disables the button, shows "Waiting for blockchain confirmation..." so the user knows a MetaMask popup is coming.
-
-**Step 3 — submit transaction:**
-```js
-App.instance.vote(App.selectedElectionId, parseInt(candidateID))
-```
-`parseInt` ensures a number is passed, not a string. MetaMask pops up for the user to confirm and sign the transaction.
-
-**Step 4 — success:**
-Shows "Vote cast successfully!" and reloads after 2 seconds so updated vote counts are fetched fresh from the chain.
-
-**Step 5 — failure:**
-`.catch()` shows the revert reason from the contract (e.g. "Not within voting period", "Already voted") and re-enables the button.
+Sets up a Web3 instance (preferring MetaMask, falling back to direct HTTP for read-only) and kicks off the app.
 
 ---
 
-### `window.addEventListener('load', ...)`
+## 11. Dockerfiles
 
-```js
-if (typeof window.ethereum !== 'undefined') {
-    window.eth = new Web3(window.ethereum);
-} else {
-    window.eth = new Web3(new Web3.providers.HttpProvider('http://127.0.0.1:8545'));
-}
-window.App.eventStart();
+### `Dockerfile` — the Node + frontend service
+
+```dockerfile
+FROM node:20-alpine
+RUN apk add --no-cache git python3 make g++
+WORKDIR /app
+COPY package.json ./
+RUN npm install --omit=dev
+COPY . .
+RUN npm run bundle
+ENV PORT=8080
+EXPOSE 8080
+CMD ["node", "backend/server.js"]
 ```
-Runs once the page fully loads.
 
-- MetaMask present → uses it as the Web3 provider (wallet signs transactions).
-- MetaMask absent → falls back to a direct HTTP connection to Ganache. Read operations still work; write operations (voting) will not.
+- `git` is required because some npm deps reference git URLs.
+- `python3 make g++` are required to compile native modules (e.g. `better-sqlite3`) when no prebuilt binary matches.
+- `--omit=dev` excludes dev-only deps (e.g. `@truffle/hdwallet-provider`).
+- The bundle step at build time means the contract address from `blockchain/build/contracts/Voting.json` (which is committed to the repo) gets baked into the JS bundle — no runtime config injection needed.
 
-Calls `App.eventStart()` to kick off everything.
+### `Dockerfile.ganache` — the chain service
+
+```dockerfile
+FROM node:20-slim
+RUN npm install -g ganache@7.9.2
+RUN mkdir -p /data
+EXPOSE 8545
+CMD ["sh", "-c", "ganache --host 0.0.0.0 --port ${PORT:-8545} --chain.networkId 1337 --chain.chainId 1337 --deterministic --db /data/chain"]
+```
+
+- `node:20-slim` (debian-based) chosen over alpine because the µWS binary in Ganache prefers glibc.
+- `--chain.networkId` and `--chain.chainId` use the dotted-form keys (Ganache 7.x rejects `--chainId` directly).
+- `--deterministic` gives the same 10 accounts every restart.
+- `--db /data/chain` persists chain state — this is the path Railway mounts a volume to, so blocks survive restarts and redeploys.
+- Binds to `0.0.0.0` so it's reachable on Railway's network, on the port Railway assigns via `$PORT`.
