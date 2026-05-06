@@ -4,3 +4,10 @@ backend/voters.db
 package-lock.json
 .env
 .claude
+
+# Local-only docs (kept on disk, never pushed)
+docs/code-explained.md
+docs/how-to-run.txt
+docs/project-explained.md
+docs/viva-prep.md
+docs/*.pdf
